@@ -54,6 +54,8 @@ jobs:
             release/*.exe
             release/*.AppImage
             release/*.zip
+            release/*.yml
+            release/*.blockmap
           if-no-files-found: warn
 
   release:
@@ -73,4 +75,6 @@ jobs:
             dist-artifacts/**/*.exe
             dist-artifacts/**/*.AppImage
             dist-artifacts/**/*.zip
+            dist-artifacts/**/*.yml
+            dist-artifacts/**/*.blockmap
           generate_release_notes: true
