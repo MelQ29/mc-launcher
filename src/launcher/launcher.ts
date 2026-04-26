@@ -3,6 +3,7 @@ import * as path from 'path';
 import { spawn } from 'child_process';
 import { logger } from '../core/logger';
 import { Paths } from '../core/paths';
+import { fetchText } from '../downloader/downloader';
 import type { LauncherConfig } from '../core/types';
 
 /**
@@ -30,6 +31,15 @@ export class GameLauncher {
 
   async launch(config: LauncherConfig, instancePath: string, minecraft: string, fabricLoader: string): Promise<{ ok: boolean; profileId: string }> {
     const dotMc = Paths.defaultDotMinecraft();
+    // The official launcher needs three things to start the modpack:
+    //   1. our profile in launcher_profiles.json (gameDir, lastVersionId, args)
+    //   2. the fabric-loader-X.Y.Z-MCVER version JSON in versions/<id>/<id>.json
+    //      so the launcher's "version manifest" recognises lastVersionId
+    //   3. vanilla MCVER (downloaded automatically once #2 is in place,
+    //      because the fabric JSON has inheritsFrom: "<MCVER>")
+    // Without (2) the launcher fails with REQUEST_FAILED / Unable to prepare
+    // assets — that's exactly the bug that hit testers on a fresh PC.
+    await this.ensureFabricVersion(dotMc, minecraft, fabricLoader);
     await this.writeProfile(dotMc, instancePath, config, minecraft, fabricLoader);
 
     // Try, in order: a known .exe path → minecraft:// URI handler → UWP shell
@@ -69,6 +79,40 @@ export class GameLauncher {
 
     logger.info('launcher', 'Profile written; user must open Minecraft Launcher manually');
     return { ok: false, profileId: this.profileId };
+  }
+
+  /**
+   * Downloads the Fabric loader version JSON from Fabric Meta and drops it
+   * into `<dotMc>/versions/<id>/<id>.json`. The official Minecraft Launcher
+   * scans that directory at startup, sees the new entry, and on first launch
+   * downloads everything (vanilla MCVER + Fabric libs) using
+   * `inheritsFrom`/`libraries` from the JSON.
+   *
+   * Idempotent — re-fetches the JSON on every launch, which doubles as a
+   * "self-heal" if the user accidentally deletes that folder.
+   */
+  private async ensureFabricVersion(dotMc: string, minecraft: string, fabricLoader: string): Promise<void> {
+    const id = `fabric-loader-${fabricLoader}-${minecraft}`;
+    const dir = path.join(dotMc, 'versions', id);
+    const file = path.join(dir, `${id}.json`);
+    const url = `https://meta.fabricmc.net/v2/versions/loader/${minecraft}/${fabricLoader}/profile/json`;
+    try {
+      const body = await fetchText(url);
+      // Sanity check: must parse and must self-identify as our id.
+      const parsed = JSON.parse(body) as { id?: string; inheritsFrom?: string };
+      if (parsed.id !== id) {
+        throw new Error(`Fabric Meta returned id="${parsed.id}", expected "${id}"`);
+      }
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(file, body, 'utf8');
+      logger.info('launcher', `Fabric version JSON installed: ${file}`);
+    } catch (err) {
+      logger.error('launcher', `Could not install Fabric version ${id}`, err);
+      // Don't throw — let the user try anyway. If the JSON already exists
+      // from a previous successful launch, MC Launcher will still work; if
+      // not, the same REQUEST_FAILED we had before will surface and the
+      // user gets a logged reason for it.
+    }
   }
 
   private async writeProfile(

@@ -44,6 +44,9 @@ const els = {
   buildUrlInput: $('buildUrlInput') as HTMLInputElement,
   uiUrlInput: $('uiUrlInput') as HTMLInputElement,
   pickPathBtn: $('pickPathBtn') as HTMLButtonElement,
+  installInfoPath: $('installInfoPath'),
+  installInfoStats: $('installInfoStats'),
+  openInstallBtn: $('openInstallBtn') as HTMLButtonElement,
   settingsSavedHint: $('settingsSavedHint'),
 
   // Logs modal
@@ -241,6 +244,24 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
 }
 
+async function refreshInstallInfo(): Promise<void> {
+  try {
+    const info = await api.getInstallInfo();
+    els.installInfoPath.textContent = info.path + (info.isCustomPath ? '  (кастомный)' : '');
+    if (!info.exists) {
+      els.installInfoStats.textContent = 'Папка ещё не создана — будет создана при первой установке';
+      return;
+    }
+    const total = Object.values(info.counts).reduce((s, n) => s + n, 0);
+    const sizeText = info.totalBytes > 0 ? `, ${formatBytes(info.totalBytes)}` : '';
+    const parts: string[] = [];
+    for (const [k, v] of Object.entries(info.counts)) parts.push(`${k}: ${v}`);
+    els.installInfoStats.textContent = `${total} файлов в управляемых папках${sizeText} • ${parts.join(' • ')}`;
+  } catch (err) {
+    els.installInfoStats.textContent = `недоступно: ${(err as Error).message}`;
+  }
+}
+
 /* ─────────── Modals ─────────── */
 
 function openModal(id: string): void {
@@ -310,7 +331,8 @@ async function bootstrap(): Promise<void> {
   els.launchBtn.addEventListener('click', () => { void handleLaunch(); });
 
   // Tool buttons
-  els.settingsBtn.addEventListener('click', () => openModal('settingsModal'));
+  els.settingsBtn.addEventListener('click', () => { openModal('settingsModal'); void refreshInstallInfo(); });
+  els.openInstallBtn.addEventListener('click', () => { void api.openInstallFolder(); });
   els.logsBtn.addEventListener('click', () => openModal('logsModal'));
   document.querySelectorAll('[data-close]').forEach((el) => {
     el.addEventListener('click', () => closeModal((el as HTMLElement).dataset.close!));

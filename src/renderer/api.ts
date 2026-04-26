@@ -67,6 +67,14 @@ export interface RendererApi {
   runUpdate(): Promise<void>;
   launchGame(): Promise<{ ok: boolean; profileId: string }>;
   pickInstallPath(): Promise<string | null>;
+  getInstallInfo(): Promise<{
+    path: string;
+    isCustomPath: boolean;
+    exists: boolean;
+    counts: Record<string, number>;
+    totalBytes: number;
+  }>;
+  openInstallFolder(): Promise<string>;
   resolveAssetUrl(name: string): Promise<string>;
   onUpdateState(cb: (state: UpdateState) => void): () => void;
   onLog(cb: (entry: LogEntry) => void): () => void;

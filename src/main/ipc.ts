@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, ipcMain } from 'electron';
+import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import * as path from 'path';
 import { promises as fs } from 'fs';
 import type { ConfigStore } from '../core/config';
@@ -64,6 +64,56 @@ export function registerIpc(deps: IpcDeps): void {
     return result;
   });
 
+  // Inspection helpers — used by the settings modal so the user can see
+  // exactly which directory is being managed and verify a fresh install
+  // really landed there.
+  ipcMain.handle('paths:installInfo', async () => {
+    const cfg = deps.config.current;
+    const root = deps.instance.path;
+    const exists = await fs.stat(root).then((s) => s.isDirectory()).catch(() => false);
+    const counts: Record<string, number> = {};
+    let totalBytes = 0;
+    if (exists) {
+      for (const sub of ['mods', 'config', 'resourcepacks', 'shaderpacks', 'datapacks']) {
+        try {
+          const entries = await fs.readdir(path.join(root, sub), { withFileTypes: true });
+          counts[sub] = entries.filter((e) => e.isFile()).length;
+        } catch { counts[sub] = 0; }
+      }
+      // Walk root for total size (one level — we don't need exact recursion).
+      try {
+        const stack: string[] = [root];
+        const seen = new Set<string>();
+        while (stack.length) {
+          const dir = stack.pop()!;
+          if (seen.has(dir)) continue;
+          seen.add(dir);
+          const entries = await fs.readdir(dir, { withFileTypes: true });
+          for (const e of entries) {
+            const full = path.join(dir, e.name);
+            if (e.isDirectory()) stack.push(full);
+            else if (e.isFile()) {
+              try { totalBytes += (await fs.stat(full)).size; } catch { /* ignore */ }
+            }
+          }
+        }
+      } catch { /* ignore — show what we have */ }
+    }
+    return {
+      path: root,
+      isCustomPath: cfg.installPath !== null,
+      exists,
+      counts,
+      totalBytes,
+    };
+  });
+  ipcMain.handle('paths:openInstallFolder', async () => {
+    const root = deps.instance.path;
+    await fs.mkdir(root, { recursive: true });
+    const err = await shell.openPath(root);
+    if (err) logger.warn('ipc', `openPath failed: ${err}`);
+    return root;
+  });
   ipcMain.handle('paths:pickInstallDir', async () => {
     const win = deps.getWindow();
     const r = await dialog.showOpenDialog(win ?? undefined!, {

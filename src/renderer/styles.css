@@ -382,6 +382,29 @@ select.ghost-btn { padding-right: 22px; }
 }
 .link-btn:hover { text-decoration: underline; }
 
+.install-info {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.install-info-path {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 10px;
+  color: var(--text);
+  word-break: break-all;
+  user-select: text;
+}
+.install-info-stats {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.install-info .link-btn { align-self: flex-start; }
+
 /* ────────── Logs ────────── */
 .logs-body { min-height: 0; flex: 1; }
 #logView {

@@ -46,6 +46,14 @@ const api = {
   runUpdate: (): Promise<void> => ipcRenderer.invoke('updater:run'),
   launchGame: (): Promise<{ ok: boolean; profileId: string }> => ipcRenderer.invoke('launcher:launch'),
   pickInstallPath: (): Promise<string | null> => ipcRenderer.invoke('paths:pickInstallDir'),
+  getInstallInfo: () => ipcRenderer.invoke('paths:installInfo') as Promise<{
+    path: string;
+    isCustomPath: boolean;
+    exists: boolean;
+    counts: Record<string, number>;
+    totalBytes: number;
+  }>,
+  openInstallFolder: (): Promise<string> => ipcRenderer.invoke('paths:openInstallFolder'),
   resolveAssetUrl: (name: string): Promise<string> => ipcRenderer.invoke('assets:resolve', name),
   onUpdateState(cb: (state: UpdateState) => void): () => void {
     updateStateListeners.add(cb);
