@@ -8,3 +8,11 @@ release/
 .idea/
 .claude/
 launcher.config.local.json
+
+# Modpack build artefacts — too large for git
+*.zip
+*.7z
+build-staging/
+build_manifest.json
+ui_manifest.json
+!manifests/*.example.json

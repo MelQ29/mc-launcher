@@ -27,9 +27,14 @@ function parseArgs(argv) {
 }
 
 function sha256(file) {
-  const hash = crypto.createHash('sha256');
-  hash.update(fs.readFileSync(file));
-  return hash.digest('hex');
+  // Streaming so multi-GB modpack archives don't blow Node's Buffer limit.
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const s = fs.createReadStream(file);
+    s.on('data', (c) => hash.update(c));
+    s.on('end', () => resolve(hash.digest('hex')));
+    s.on('error', reject);
+  });
 }
 
 function walk(root, base = root, out = []) {
@@ -41,7 +46,7 @@ function walk(root, base = root, out = []) {
   return out;
 }
 
-function main() {
+async function main() {
   const args = parseArgs(process.argv);
   const required = ['instance', 'archive', 'version', 'minecraft', 'fabric', 'archive-url', 'out'];
   for (const r of required) {
@@ -51,21 +56,29 @@ function main() {
       process.exit(1);
     }
   }
-  const files = walk(args.instance).map((rel) => {
+  const relPaths = walk(args.instance);
+  console.log(`Hashing ${relPaths.length} files...`);
+  const files = [];
+  let i = 0;
+  for (const rel of relPaths) {
     const abs = path.join(args.instance, rel);
-    return {
+    files.push({
       path: rel,
-      sha256: sha256(abs),
+      sha256: await sha256(abs),
       size: fs.statSync(abs).size,
-    };
-  });
+    });
+    i++;
+    if (i % 200 === 0) console.log(`  ${i}/${relPaths.length}`);
+  }
+  console.log('Hashing archive...');
+  const archiveSha = await sha256(args.archive);
   const archiveStat = fs.statSync(args.archive);
   const manifest = {
     version: args.version,
     minecraft: args.minecraft,
     fabricLoader: args.fabric,
     archiveUrl: args['archive-url'],
-    archiveSha256: sha256(args.archive),
+    archiveSha256: archiveSha,
     archiveSize: archiveStat.size,
     files,
     generatedAt: new Date().toISOString(),
@@ -74,4 +87,4 @@ function main() {
   console.log(`Wrote ${args.out} (${files.length} files, archive ${archiveStat.size} bytes)`);
 }
 
-main();
+main().catch((err) => { console.error(err); process.exit(1); });
