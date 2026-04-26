@@ -31,6 +31,10 @@ export class GameLauncher {
   async launch(config: LauncherConfig, instancePath: string, minecraft: string, fabricLoader: string): Promise<{ ok: boolean; profileId: string }> {
     const dotMc = Paths.defaultDotMinecraft();
     await this.writeProfile(dotMc, instancePath, config, minecraft, fabricLoader);
+
+    // Try, in order: a known .exe path → minecraft:// URI handler → UWP shell
+    // appsFolder route. The first one that doesn't throw wins. Each method
+    // works on a different launcher edition (standalone / Xbox / MS Store).
     const exe = await this.findOfficialLauncher();
     if (exe) {
       logger.info('launcher', `Spawning official launcher: ${exe}`);
@@ -39,9 +43,30 @@ export class GameLauncher {
         child.unref();
         return { ok: true, profileId: this.profileId };
       } catch (err) {
-        logger.warn('launcher', `Could not spawn official launcher: ${(err as Error).message}`);
+        logger.warn('launcher', `Could not spawn ${exe}: ${(err as Error).message}`);
       }
     }
+
+    if (process.platform === 'win32') {
+      // `cmd /c start ""` lets Windows resolve protocol/UWP handlers without
+      // a console window staying open. The empty title arg is mandatory or
+      // start treats the next quoted arg as the title.
+      const tryStart = async (target: string, label: string): Promise<boolean> => {
+        try {
+          const child = spawn('cmd.exe', ['/c', 'start', '""', target], { detached: true, stdio: 'ignore', shell: false });
+          child.unref();
+          logger.info('launcher', `Launched via ${label}: ${target}`);
+          return true;
+        } catch (err) {
+          logger.warn('launcher', `${label} failed: ${(err as Error).message}`);
+          return false;
+        }
+      };
+      if (await tryStart('minecraft://', 'protocol handler')) return { ok: true, profileId: this.profileId };
+      if (await tryStart('shell:AppsFolder\\Microsoft.4297127D64EC6_8wekyb3d8bbwe!Minecraft', 'AppsFolder UWP route'))
+        return { ok: true, profileId: this.profileId };
+    }
+
     logger.info('launcher', 'Profile written; user must open Minecraft Launcher manually');
     return { ok: false, profileId: this.profileId };
   }
@@ -87,8 +112,13 @@ export class GameLauncher {
     const candidates: string[] = [];
     if (platform === 'win32') {
       candidates.push(
+        // Game Pass / Xbox install (most common on Win 11) — exe is just `Minecraft.exe`.
+        'C:\\XboxGames\\Minecraft Launcher\\Content\\Minecraft.exe',
+        path.join(process.env['SystemDrive'] ?? 'C:', '\\XboxGames', 'Minecraft Launcher', 'Content', 'Minecraft.exe'),
+        // Standalone installer from minecraft.net.
         path.join(process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)', 'Minecraft Launcher', 'MinecraftLauncher.exe'),
         path.join(process.env['ProgramFiles'] ?? 'C:\\Program Files', 'Minecraft Launcher', 'MinecraftLauncher.exe'),
+        // Older per-user install paths.
         path.join(process.env['LOCALAPPDATA'] ?? '', 'Programs', 'Minecraft', 'MinecraftLauncher.exe'),
         path.join(process.env['LOCALAPPDATA'] ?? '', 'Programs', 'Minecraft Launcher', 'MinecraftLauncher.exe'),
       );
