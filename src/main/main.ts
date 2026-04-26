@@ -63,6 +63,16 @@ async function bootstrap(): Promise<void> {
 }
 
 async function createWindow(): Promise<void> {
+  // Look up the icon both in dev (project tree) and packaged (resourcesPath/build)
+  // — electron-builder copies build/ implicitly only as the app icon, not as
+  // an extraResource, so we point at the project tree explicitly during dev.
+  const iconCandidates = [
+    path.join(__dirname, '..', '..', '..', 'build', 'icon.ico'),
+    path.join(process.resourcesPath || '', 'build', 'icon.ico'),
+  ];
+  const { existsSync } = await import('fs');
+  const icon = iconCandidates.find((p) => p && existsSync(p));
+
   const win = new BrowserWindow({
     width: 1100,
     height: 720,
@@ -70,6 +80,7 @@ async function createWindow(): Promise<void> {
     minHeight: 600,
     backgroundColor: '#0a0a14',
     title: 'EclipseFantasy',
+    icon,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, '..', 'main', 'preload.js'),

@@ -42,6 +42,7 @@
     "files": [
       "dist/**/*",
       "assets/**/*",
+      "build/icon.*",
       "config/**/*",
       "package.json"
     ],
@@ -51,11 +52,17 @@
         "to": "assets"
       },
       {
+        "from": "build",
+        "to": "build",
+        "filter": ["icon.*"]
+      },
+      {
         "from": "config",
         "to": "config"
       }
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -65,15 +72,21 @@
           "target": "portable",
           "arch": ["x64"]
         }
-      ],
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      ]
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "perMachine": false
+      "perMachine": false,
+      "artifactName": "${productName}-Setup-${version}.${ext}",
+      "shortcutName": "${productName}",
+      "uninstallDisplayName": "${productName} ${version}"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}.${ext}"
     },
     "linux": {
+      "icon": "build/icon.png",
       "target": [
         {
           "target": "AppImage",
