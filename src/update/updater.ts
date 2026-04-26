@@ -58,6 +58,8 @@ export class Updater extends EventEmitter {
     buildVersion: string;
     uiVersion: string;
     needsUpdate: boolean;
+    recommendedRamMb?: number;
+    minRamMb?: number;
   }> {
     this.setState({ stage: 'check', message: 'Проверка обновлений...' });
     const [{ manifest: build }, { manifest: ui }] = await Promise.all([
@@ -71,7 +73,13 @@ export class Updater extends EventEmitter {
       lock.uiVersion !== ui.version ||
       lock.archiveSha256 !== build.archiveSha256;
     this.setState({ stage: 'idle', message: needsUpdate ? 'Доступно обновление' : 'Сборка актуальна' });
-    return { buildVersion: build.version, uiVersion: ui.version, needsUpdate };
+    return {
+      buildVersion: build.version,
+      uiVersion: ui.version,
+      needsUpdate,
+      recommendedRamMb: build.recommendedRamMb,
+      minRamMb: build.minRamMb,
+    };
   }
 
   async runUpdate(config: LauncherConfig): Promise<void> {

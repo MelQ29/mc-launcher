@@ -64,11 +64,11 @@ async function bootstrap(): Promise<void> {
 
 async function createWindow(): Promise<void> {
   const win = new BrowserWindow({
-    width: 980,
-    height: 620,
-    minWidth: 860,
-    minHeight: 540,
-    backgroundColor: '#0b0b15',
+    width: 1100,
+    height: 720,
+    minWidth: 920,
+    minHeight: 600,
+    backgroundColor: '#0a0a14',
     title: 'EclipseFantasy',
     autoHideMenuBar: true,
     webPreferences: {

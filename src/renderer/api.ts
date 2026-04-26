@@ -52,6 +52,8 @@ export interface RendererApi {
     buildVersion: string;
     uiVersion: string;
     needsUpdate: boolean;
+    recommendedRamMb?: number;
+    minRamMb?: number;
     error?: string;
   }>;
   runUpdate(): Promise<void>;

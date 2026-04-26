@@ -8,69 +8,127 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="frame frame-background" id="frameBackground"></div>
+    <!-- Full-bleed background image (modpack art). -->
+    <div class="bg" id="frameBackground"></div>
+    <div class="bg-vignette"></div>
 
-    <header class="frame frame-banner" id="frameBanner">
-      <img id="bannerLogo" alt="EclipseFantasy" />
+    <!-- Top bar: version chips + tool buttons. -->
+    <header class="topbar">
+      <div class="chips">
+        <div class="chip" id="versionChip">
+          <span class="chip-label">Сборка</span>
+          <span class="chip-value" id="buildVersion">—</span>
+        </div>
+        <div class="chip" id="installedChip">
+          <span class="chip-label">Установлено</span>
+          <span class="chip-value" id="installedVersion">—</span>
+        </div>
+      </div>
+      <div class="tools">
+        <button class="icon-btn" id="logsBtn" title="Логи" aria-label="Логи">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg>
+        </button>
+        <button class="icon-btn" id="settingsBtn" title="Настройки" aria-label="Настройки">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
     </header>
 
-    <main class="content">
-      <section class="status-card">
-        <div class="status-row">
-          <span class="label">Версия сборки:</span>
-          <span id="buildVersion">—</span>
-        </div>
-        <div class="status-row">
-          <span class="label">Установлено:</span>
-          <span id="installedVersion">—</span>
-        </div>
-        <div class="status-row">
-          <span class="label">Состояние:</span>
-          <span id="updateState">idle</span>
-        </div>
-        <progress id="progressBar" max="100" value="0"></progress>
-        <div class="progress-detail">
-          <span id="progressText">Готов к работе</span>
+    <!-- Optional centered banner image (collapsed if no logo asset is available). -->
+    <section class="banner" id="frameBanner">
+      <img id="bannerLogo" alt="EclipseFantasy" />
+    </section>
+
+    <!-- Spacer pushes the action area to the bottom. -->
+    <div class="spacer"></div>
+
+    <!-- Action area: progress + launch button. -->
+    <section class="action">
+      <div class="progress-wrap" id="progressWrap" hidden>
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+        <div class="progress-meta">
+          <span id="progressText"></span>
           <span id="progressSpeed"></span>
         </div>
-      </section>
-
-      <section class="settings-card">
-        <h3>Настройки</h3>
-        <label>
-          RAM (MiB)
-          <input id="ramInput" type="number" min="512" max="65536" step="256" />
-        </label>
-        <label>
-          Папка установки
-          <div class="row">
-            <input id="installPathInput" type="text" placeholder="по умолчанию (userData/instance)" />
-            <button id="pickPathBtn" type="button">…</button>
-          </div>
-        </label>
-        <label>
-          URL build_manifest.json
-          <input id="buildUrlInput" type="text" />
-        </label>
-        <label>
-          URL ui_manifest.json
-          <input id="uiUrlInput" type="text" />
-        </label>
-        <button id="saveSettingsBtn" type="button">Сохранить настройки</button>
-      </section>
-
-      <section class="log-card">
-        <h3>Лог</h3>
-        <pre id="logView"></pre>
-      </section>
-    </main>
-
-    <footer class="frame frame-launch">
+      </div>
+      <div class="status-line" id="statusLine">Загрузка...</div>
       <button id="launchBtn" type="button" disabled>
         <img id="launchBtnImg" alt="Запуск" />
-        <span id="launchBtnText">Загрузка...</span>
       </button>
-    </footer>
+      <div class="status-sub" id="launchBtnText">Загрузка...</div>
+    </section>
+
+    <!-- Settings modal. -->
+    <div class="modal" id="settingsModal" hidden>
+      <div class="modal-backdrop" data-close="settingsModal"></div>
+      <div class="modal-card" role="dialog" aria-labelledby="settingsTitle">
+        <header class="modal-head">
+          <h2 id="settingsTitle">Настройки</h2>
+          <button class="icon-btn close" data-close="settingsModal" aria-label="Закрыть">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </header>
+        <div class="modal-body">
+          <div class="field">
+            <label for="ramSlider">Оперативная память</label>
+            <div class="slider-row">
+              <input id="ramSlider" type="range" min="1024" max="32768" step="256" />
+              <input id="ramInput" type="number" min="512" max="65536" step="256" />
+              <span class="unit">MB</span>
+            </div>
+            <div class="field-hint">
+              <span id="ramRecHint">Рекомендуется: —</span>
+              <button class="link-btn" id="useRecommendedBtn" type="button" hidden>применить</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="installPathInput">Папка установки</label>
+            <div class="row">
+              <input id="installPathInput" type="text" placeholder="по умолчанию" />
+              <button class="ghost-btn" id="pickPathBtn" type="button">Обзор…</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="buildUrlInput">URL build_manifest.json</label>
+            <input id="buildUrlInput" type="text" />
+          </div>
+
+          <div class="field">
+            <label for="uiUrlInput">URL ui_manifest.json</label>
+            <input id="uiUrlInput" type="text" />
+          </div>
+
+          <div class="field-hint" id="settingsSavedHint">Изменения применяются автоматически.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Logs modal. -->
+    <div class="modal" id="logsModal" hidden>
+      <div class="modal-backdrop" data-close="logsModal"></div>
+      <div class="modal-card wide" role="dialog" aria-labelledby="logsTitle">
+        <header class="modal-head">
+          <h2 id="logsTitle">Логи</h2>
+          <div class="head-tools">
+            <select id="logFilter" class="ghost-btn">
+              <option value="all">Все</option>
+              <option value="info">Info+</option>
+              <option value="warn">Warn+</option>
+              <option value="error">Error</option>
+            </select>
+            <button class="ghost-btn" id="clearLogsBtn" type="button">Очистить</button>
+            <button class="icon-btn close" data-close="logsModal" aria-label="Закрыть">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        </header>
+        <div class="modal-body logs-body">
+          <pre id="logView"></pre>
+        </div>
+      </div>
+    </div>
 
     <script type="module" src="./renderer.js"></script>
   </body>

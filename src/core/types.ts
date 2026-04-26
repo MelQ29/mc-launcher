@@ -31,6 +31,10 @@ export interface BuildManifest {
   signature?: string;
   /** ISO timestamp when manifest was generated. */
   generatedAt?: string;
+  /** Recommended JVM heap (MiB) for this modpack. Surfaced in the UI. */
+  recommendedRamMb?: number;
+  /** Minimum JVM heap (MiB). Below this the launch warns the user. */
+  minRamMb?: number;
 }
 
 export interface UiManifest {
@@ -120,6 +124,8 @@ export interface RendererApi {
     buildVersion: string;
     uiVersion: string;
     needsUpdate: boolean;
+    recommendedRamMb?: number;
+    minRamMb?: number;
     error?: string;
   }>;
   runUpdate(): Promise<void>;

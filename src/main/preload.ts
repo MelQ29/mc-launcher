@@ -32,6 +32,8 @@ const api = {
     buildVersion: string;
     uiVersion: string;
     needsUpdate: boolean;
+    recommendedRamMb?: number;
+    minRamMb?: number;
     error?: string;
   }> => ipcRenderer.invoke('updater:check'),
   runUpdate: (): Promise<void> => ipcRenderer.invoke('updater:run'),
