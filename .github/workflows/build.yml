@@ -41,14 +41,10 @@ jobs:
       - name: Package (Windows)
         if: matrix.target == 'win'
         run: npm run dist:win
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Package (Linux)
         if: matrix.target == 'linux'
         run: npm run dist:linux
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
