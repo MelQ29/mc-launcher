@@ -28,8 +28,12 @@ const api = {
   saveConfig: (patch: Partial<LauncherConfig>): Promise<LauncherConfig> =>
     ipcRenderer.invoke('config:save', patch),
   getInstalledVersion: (): Promise<string | null> => ipcRenderer.invoke('updater:installedVersion'),
-  checkForUpdates: (): Promise<{ buildVersion: string; uiVersion: string; needsUpdate: boolean }> =>
-    ipcRenderer.invoke('updater:check'),
+  checkForUpdates: (): Promise<{
+    buildVersion: string;
+    uiVersion: string;
+    needsUpdate: boolean;
+    error?: string;
+  }> => ipcRenderer.invoke('updater:check'),
   runUpdate: (): Promise<void> => ipcRenderer.invoke('updater:run'),
   launchGame: (): Promise<{ ok: boolean; profileId: string }> => ipcRenderer.invoke('launcher:launch'),
   pickInstallPath: (): Promise<string | null> => ipcRenderer.invoke('paths:pickInstallDir'),

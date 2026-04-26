@@ -36,7 +36,16 @@ export function registerIpc(deps: IpcDeps): void {
   ipcMain.handle('updater:installedVersion', async () => deps.updater.installedVersion());
   ipcMain.handle('updater:check', async () => {
     const cfg = deps.config.current;
-    return deps.updater.checkForUpdates(cfg);
+    try {
+      return await deps.updater.checkForUpdates(cfg);
+    } catch (err) {
+      // First-run with no GitHub release yet, or no network: surface as a
+      // structured "unknown" response so the renderer can show a friendly
+      // state instead of an error toast in the main console.
+      const message = (err as Error).message;
+      logger.warn('ipc', `check failed: ${message}`);
+      return { buildVersion: 'unknown', uiVersion: 'unknown', needsUpdate: false, error: message };
+    }
   });
   ipcMain.handle('updater:run', async () => {
     const cfg = deps.config.current;

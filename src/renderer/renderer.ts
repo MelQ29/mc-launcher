@@ -94,6 +94,12 @@ async function refreshVersionInfo(): Promise<void> {
   els.installedVersion.textContent = installed ?? 'не установлено';
   try {
     const result = await api.checkForUpdates();
+    if (result.error) {
+      els.buildVersion.textContent = `недоступно (${result.error.split(':')[0]})`;
+      if (installed) setLaunchEnabled(true, 'Запуск (оффлайн)');
+      else setLaunchEnabled(false, 'Манифест недоступен');
+      return;
+    }
     els.buildVersion.textContent = result.buildVersion;
     updateNeeded = result.needsUpdate;
     if (result.needsUpdate) setLaunchEnabled(true, 'Обновить и запустить');

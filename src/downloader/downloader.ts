@@ -77,6 +77,11 @@ export class Downloader {
         return;
       } catch (err) {
         lastErr = err instanceof Error ? err : new Error(String(err));
+        // Permanent client errors (404/403/401/410) won't change with retries.
+        // Throw immediately so the caller sees the real reason fast.
+        if (err instanceof NonRetryableHttpError) {
+          throw lastErr;
+        }
         attempt++;
         if (attempt > opts.retries) break;
         const delay = Math.min(30000, 500 * Math.pow(2, attempt));
@@ -174,7 +179,12 @@ export class Downloader {
       from = 0;
       await fs.unlink(partFile).catch(() => undefined);
     } else if (res.status !== 200 && res.status !== 206) {
-      throw new Error(`HTTP ${res.status} for ${opts.url}`);
+      // 4xx (except 408 Request Timeout, 429 Too Many Requests) is permanent.
+      const permanent =
+        res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429;
+      const msg = `HTTP ${res.status} for ${opts.url}`;
+      if (permanent) throw new NonRetryableHttpError(msg, res.status);
+      throw new Error(msg);
     }
     if (from > 0 && opts.onProgress) opts.onProgress(from); // count already-on-disk bytes once
 
@@ -220,6 +230,13 @@ export class Downloader {
       req.on('error', reject);
       req.end();
     });
+  }
+}
+
+class NonRetryableHttpError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = 'NonRetryableHttpError';
   }
 }
 

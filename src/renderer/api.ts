@@ -48,7 +48,12 @@ export interface RendererApi {
   getConfig(): Promise<LauncherConfig>;
   saveConfig(patch: Partial<LauncherConfig>): Promise<LauncherConfig>;
   getInstalledVersion(): Promise<string | null>;
-  checkForUpdates(): Promise<{ buildVersion: string; uiVersion: string; needsUpdate: boolean }>;
+  checkForUpdates(): Promise<{
+    buildVersion: string;
+    uiVersion: string;
+    needsUpdate: boolean;
+    error?: string;
+  }>;
   runUpdate(): Promise<void>;
   launchGame(): Promise<{ ok: boolean; profileId: string }>;
   pickInstallPath(): Promise<string | null>;
