@@ -1,0 +1,142 @@
+:root {
+  --bg-base: #0b0b15;
+  --bg-elevated: rgba(20, 18, 35, 0.78);
+  --accent: #7c5cff;
+  --accent-strong: #9b7dff;
+  --text: #ece9ff;
+  --text-dim: #a8a3c4;
+  --border: rgba(255, 255, 255, 0.08);
+  --error: #ff5c8a;
+  --ok: #6ce0a5;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg-base);
+  color: var(--text);
+  font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+}
+
+body {
+  display: grid;
+  grid-template-rows: 120px 1fr 96px;
+  position: relative;
+}
+
+.frame { position: relative; z-index: 1; }
+
+/* Background frame: behind everything else, bleeds to all corners. */
+.frame-background {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-color: var(--bg-base);
+  background-size: cover;
+  background-position: center;
+  filter: brightness(0.55) saturate(1.1);
+}
+
+/* Banner: top-centred PNG logo. */
+.frame-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 24px 8px;
+}
+.frame-banner img {
+  max-height: 96px;
+  max-width: 70%;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.5));
+}
+
+/* Launch button frame at the bottom. */
+.frame-launch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 24px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0));
+}
+#launchBtn {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 14px 56px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: linear-gradient(135deg, var(--accent), #5b3ed1);
+  color: var(--text);
+  cursor: pointer;
+  transition: transform 0.08s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+  box-shadow: 0 8px 28px rgba(124, 92, 255, 0.45);
+}
+#launchBtn:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 12px 36px rgba(124, 92, 255, 0.6); }
+#launchBtn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  grid-template-areas:
+    "status   settings"
+    "log      settings";
+  gap: 14px;
+  padding: 12px 24px;
+  overflow: hidden;
+}
+.status-card { grid-area: status; }
+.settings-card { grid-area: settings; }
+.log-card { grid-area: log; min-height: 0; }
+
+.status-card, .settings-card, .log-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 18px;
+  backdrop-filter: blur(6px);
+}
+
+.status-card .status-row { display: flex; justify-content: space-between; padding: 4px 0; }
+.status-card .label { color: var(--text-dim); }
+#progressBar {
+  width: 100%;
+  height: 8px;
+  margin-top: 12px;
+  appearance: none;
+}
+#progressBar::-webkit-progress-bar { background: rgba(255,255,255,0.07); border-radius: 4px; }
+#progressBar::-webkit-progress-value { background: linear-gradient(90deg, var(--accent), var(--accent-strong)); border-radius: 4px; }
+.progress-detail { display: flex; justify-content: space-between; color: var(--text-dim); margin-top: 4px; }
+
+.settings-card h3, .log-card h3 { margin: 0 0 8px; font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-dim); }
+.settings-card label { display: block; margin-bottom: 10px; color: var(--text-dim); font-size: 12px; }
+.settings-card input { width: 100%; margin-top: 4px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: rgba(0,0,0,0.35); color: var(--text); font-size: 12px; }
+.settings-card .row { display: flex; gap: 6px; }
+.settings-card .row input { flex: 1; }
+.settings-card button { background: rgba(124, 92, 255, 0.2); border: 1px solid var(--accent); color: var(--text); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+.settings-card button:hover { background: rgba(124, 92, 255, 0.35); }
+
+.log-card { display: flex; flex-direction: column; min-height: 0; }
+#logView {
+  margin: 0;
+  flex: 1;
+  overflow: auto;
+  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+#logView .l-error { color: var(--error); }
+#logView .l-warn { color: #ffc56c; }
+#logView .l-info { color: var(--text); }
+#logView .l-debug { color: var(--text-dim); }

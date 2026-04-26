@@ -1,0 +1,18 @@
+{
+  "version": "2026.04.26-ui1",
+  "files": [
+    {
+      "path": "logo.png",
+      "url": "https://github.com/MelQ29/mc-launcher/releases/download/ui-2026.04.26-1/logo.png",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 0
+    },
+    {
+      "path": "background.png",
+      "url": "https://github.com/MelQ29/mc-launcher/releases/download/ui-2026.04.26-1/background.png",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "size": 0
+    }
+  ],
+  "generatedAt": "2026-04-26T00:00:00Z"
+}

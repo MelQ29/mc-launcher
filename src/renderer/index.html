@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self'; img-src 'self' ef-asset: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'" />
+    <title>EclipseFantasy Launcher</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="frame frame-background" id="frameBackground"></div>
+
+    <header class="frame frame-banner">
+      <img id="bannerLogo" alt="EclipseFantasy" />
+    </header>
+
+    <main class="content">
+      <section class="status-card">
+        <div class="status-row">
+          <span class="label">Версия сборки:</span>
+          <span id="buildVersion">—</span>
+        </div>
+        <div class="status-row">
+          <span class="label">Установлено:</span>
+          <span id="installedVersion">—</span>
+        </div>
+        <div class="status-row">
+          <span class="label">Состояние:</span>
+          <span id="updateState">idle</span>
+        </div>
+        <progress id="progressBar" max="100" value="0"></progress>
+        <div class="progress-detail">
+          <span id="progressText">Готов к работе</span>
+          <span id="progressSpeed"></span>
+        </div>
+      </section>
+
+      <section class="settings-card">
+        <h3>Настройки</h3>
+        <label>
+          RAM (MiB)
+          <input id="ramInput" type="number" min="512" max="65536" step="256" />
+        </label>
+        <label>
+          Папка установки
+          <div class="row">
+            <input id="installPathInput" type="text" placeholder="по умолчанию (userData/instance)" />
+            <button id="pickPathBtn" type="button">…</button>
+          </div>
+        </label>
+        <label>
+          URL build_manifest.json
+          <input id="buildUrlInput" type="text" />
+        </label>
+        <label>
+          URL ui_manifest.json
+          <input id="uiUrlInput" type="text" />
+        </label>
+        <button id="saveSettingsBtn" type="button">Сохранить настройки</button>
+      </section>
+
+      <section class="log-card">
+        <h3>Лог</h3>
+        <pre id="logView"></pre>
+      </section>
+    </main>
+
+    <footer class="frame frame-launch">
+      <button id="launchBtn" type="button" disabled>Загрузка...</button>
+    </footer>
+
+    <script type="module" src="./renderer.js"></script>
+  </body>
+</html>

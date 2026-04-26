@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist/main",
+    "rootDir": "src",
+    "lib": ["ES2022"],
+    "types": ["node"]
+  },
+  "include": [
+    "src/main/**/*",
+    "src/core/**/*",
+    "src/downloader/**/*",
+    "src/manifest/**/*",
+    "src/launcher/**/*",
+    "src/storage/**/*",
+    "src/update/**/*"
+  ],
+  "exclude": ["src/renderer/**/*", "node_modules", "dist", "release"]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "EclipseFantasy",
+  "version": "0.1.0",
+  "buildManifestUrl": "https://github.com/MelQ29/mc-launcher/releases/latest/download/build_manifest.json",
+  "uiManifestUrl": "https://github.com/MelQ29/mc-launcher/releases/latest/download/ui_manifest.json",
+  "ramMb": 4096,
+  "installPath": null,
+  "downloadConcurrency": 4,
+  "downloadRetries": 5,
+  "requireValidSignature": false
+}
