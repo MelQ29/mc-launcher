@@ -188,8 +188,17 @@ async function handleLaunch(): Promise<void> {
       updateNeeded = false;
     }
     const result = await api.launchGame();
-    if (result.ok) setLaunchEnabled(false, 'Запущено');
-    else setLaunchEnabled(true, 'Открой Minecraft Launcher вручную');
+    if (result.ok) {
+      // The official Minecraft Launcher detaches immediately, so we can't
+      // observe its lifecycle. Flash "Запущено" briefly and then re-enable
+      // the button so the user can launch again (e.g. after closing MC).
+      setLaunchEnabled(false, 'Запущено');
+      window.setTimeout(() => {
+        if (!busy) setLaunchEnabled(true, updateNeeded ? 'Обновить и запустить' : 'Запуск');
+      }, 2500);
+    } else {
+      setLaunchEnabled(true, 'Открой Minecraft Launcher вручную');
+    }
   } catch (err) {
     setLaunchEnabled(true, 'Повторить');
     appendLog({ ts: new Date().toISOString(), level: 'error', scope: 'ui', message: (err as Error).message });
