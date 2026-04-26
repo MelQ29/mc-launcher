@@ -16,3 +16,7 @@ build-staging/
 build_manifest.json
 ui_manifest.json
 !manifests/*.example.json
+
+# Admin-only release/deploy tooling — not part of the launcher source
+scripts/sftp-upload.py
+push-key.py
