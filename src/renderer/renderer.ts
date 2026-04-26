@@ -14,6 +14,7 @@ const $ = <T extends HTMLElement>(id: string): T => {
 
 const els = {
   bannerLogo: $('bannerLogo') as HTMLImageElement,
+  banner: $('frameBanner'),
   background: $('frameBackground'),
   installedVersion: $('installedVersion'),
   buildVersion: $('buildVersion'),
@@ -28,6 +29,8 @@ const els = {
   pickPathBtn: $('pickPathBtn') as HTMLButtonElement,
   saveSettingsBtn: $('saveSettingsBtn') as HTMLButtonElement,
   launchBtn: $('launchBtn') as HTMLButtonElement,
+  launchBtnImg: $('launchBtnImg') as HTMLImageElement,
+  launchBtnText: $('launchBtnText'),
   logView: $('logView'),
 };
 
@@ -36,7 +39,7 @@ let updateNeeded = false;
 
 function setLaunchEnabled(enabled: boolean, label?: string): void {
   els.launchBtn.disabled = !enabled;
-  if (label) els.launchBtn.textContent = label;
+  if (label) els.launchBtnText.textContent = label;
 }
 
 function appendLog(entry: LogEntry): void {
@@ -60,13 +63,24 @@ async function loadConfigIntoUi(): Promise<LauncherConfig> {
 }
 
 async function loadAssets(): Promise<void> {
-  const [logoUrl, bgUrl] = await Promise.all([
+  const [logoUrl, bgUrl, btnUrl] = await Promise.all([
     api.resolveAssetUrl('logo.png'),
     api.resolveAssetUrl('background.png'),
+    api.resolveAssetUrl('play_button.png'),
   ]);
-  els.bannerLogo.src = logoUrl;
-  els.bannerLogo.onerror = () => { els.bannerLogo.style.opacity = '0.4'; };
   els.background.style.backgroundImage = `url("${bgUrl}")`;
+  els.launchBtnImg.src = btnUrl;
+  // Banner logo is optional. The bundled fallback Iss_logo.png is a 1×1
+  // placeholder — once it loads, we can detect that and collapse the banner
+  // row. If the user later ships a real logo via ui_manifest.json, the
+  // `naturalHeight` check will be > 8 and the banner stays visible.
+  const probe = new Image();
+  probe.onload = () => {
+    if (probe.naturalHeight < 8) document.body.classList.add('no-banner');
+    else els.bannerLogo.src = logoUrl;
+  };
+  probe.onerror = () => document.body.classList.add('no-banner');
+  probe.src = logoUrl;
 }
 
 function applyState(state: UpdateState): void {
