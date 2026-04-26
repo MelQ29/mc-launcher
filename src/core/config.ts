@@ -36,11 +36,44 @@ export class ConfigStore {
   async load(): Promise<LauncherConfig> {
     if (this.loaded) return this.config;
     const bundled = await this.tryRead(path.join(this.bundledConfigDir, 'launcher.config.json'));
-    const user = await this.tryRead(this.settingsFile);
+    const userRaw = await this.tryRead(this.settingsFile);
+    const user = this.migrateStaleUrls(userRaw);
     this.config = this.merge(DEFAULT_CONFIG, bundled, user);
     this.loaded = true;
+    // Persist if migration changed anything, so the user file stays clean.
+    if (userRaw && JSON.stringify(userRaw) !== JSON.stringify(user)) {
+      await fs.writeFile(this.settingsFile, JSON.stringify(this.config, null, 2), 'utf8').catch(() => undefined);
+    }
     logger.info('config', `Loaded config (RAM=${this.config.ramMb}MiB, installPath=${this.config.installPath ?? '<default>'})`);
     return this.config;
+  }
+
+  /**
+   * Strip URL fields from a user config when they match a value we know is
+   * stale (e.g. early builds shipped GitHub Releases URLs that got broken
+   * once the launcher binary release became "latest"). Removing them lets
+   * the bundled / default URL win on the next merge.
+   */
+  private migrateStaleUrls(user: Partial<LauncherConfig> | null): Partial<LauncherConfig> | null {
+    if (!user) return null;
+    const stalePatterns = [
+      // Pre-VPS modpack manifest URLs lived on GitHub Releases /latest.
+      'github.com/MelQ29/mc-launcher/releases/latest/download/build_manifest.json',
+      'github.com/MelQ29/mc-launcher/releases/latest/download/ui_manifest.json',
+      // Older placeholder.
+      'eclipsefantasy/launcher-assets',
+    ];
+    const out = { ...user };
+    let changed = false;
+    for (const key of ['buildManifestUrl', 'uiManifestUrl'] as const) {
+      const v = out[key];
+      if (typeof v === 'string' && stalePatterns.some((p) => v.includes(p))) {
+        delete out[key];
+        changed = true;
+        logger.warn('config', `Migrating away from stale ${key}: ${v}`);
+      }
+    }
+    return changed ? out : user;
   }
 
   get current(): LauncherConfig {

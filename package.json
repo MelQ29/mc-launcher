@@ -1,7 +1,7 @@
 {
   "name": "eclipse-fantasy-launcher",
   "productName": "EclipseFantasy",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Cross-platform Minecraft launcher for the EclipseFantasy modpack",
   "main": "dist/main/main/main.js",
   "author": {
