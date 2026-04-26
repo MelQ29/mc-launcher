@@ -85,8 +85,24 @@ function main() {
   fs.writeFileSync('ui_manifest.json', JSON.stringify(manifest, null, 2));
   console.log('Wrote ui_manifest.json');
 
-  // Push to GitHub release (replace existing asset).
-  run('gh', ['release', 'upload', RELEASE_TAG, 'ui_manifest.json', '--clobber', '--repo', REPO]);
+  // Sync the manifest itself to the VPS so the launcher (which now reads
+  // manifests from there, not from GitHub) sees the new version.
+  run('python', ['-u', 'scripts/sftp-upload.py', 'eclipse-vps', 'ui_manifest.json', '/var/www/eclipsefantasy/ui_manifest.json'], {
+    env: { ...process.env, MSYS_NO_PATHCONV: '1' },
+  });
+  if (fs.existsSync('build_manifest.json')) {
+    run('python', ['-u', 'scripts/sftp-upload.py', 'eclipse-vps', 'build_manifest.json', '/var/www/eclipsefantasy/build_manifest.json'], {
+      env: { ...process.env, MSYS_NO_PATHCONV: '1' },
+    });
+  }
+
+  // Mirror to the GitHub launcher release as a backup so users with old
+  // configs (pre-VPS-manifests) still get something. Best-effort.
+  try {
+    run('gh', ['release', 'upload', RELEASE_TAG, 'ui_manifest.json', '--clobber', '--repo', REPO]);
+  } catch (e) {
+    console.warn('GH release upload failed (non-fatal):', e.message);
+  }
 
   console.log('\n✓ UI release published.');
   console.log('  Restart the launcher — it will see the new uiVersion and re-download assets.');

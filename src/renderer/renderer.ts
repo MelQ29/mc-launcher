@@ -1,4 +1,4 @@
-import type { LauncherConfig, UpdateState, LogEntry, RendererApi } from './api';
+import type { LauncherConfig, UpdateState, LogEntry, RendererApi, SelfUpdateState } from './api';
 
 declare global {
   interface Window { eclipseApi: RendererApi; }
@@ -51,6 +51,11 @@ const els = {
   logView: $('logView'),
   logFilter: $('logFilter') as HTMLSelectElement,
   clearLogsBtn: $('clearLogsBtn') as HTMLButtonElement,
+
+  // Self-update banner
+  selfUpdateBanner: $('selfUpdateBanner'),
+  selfUpdateMsg: $('selfUpdateMsg'),
+  selfUpdateBtn: $('selfUpdateBtn') as HTMLButtonElement,
 };
 
 let busy = false;
@@ -258,9 +263,49 @@ function formatBytes(n: number): string {
   return `${v.toFixed(v >= 100 ? 0 : 1)} ${units[u]}`;
 }
 
+function applySelfUpdate(state: SelfUpdateState): void {
+  const banner = els.selfUpdateBanner;
+  const msg = els.selfUpdateMsg;
+  const btn = els.selfUpdateBtn;
+  switch (state.status) {
+    case 'idle':
+    case 'checking':
+    case 'not-available':
+      banner.hidden = true;
+      break;
+    case 'available':
+      banner.hidden = false;
+      msg.textContent = `Найдено обновление лаунчера v${state.version} — скачиваю...`;
+      btn.hidden = true;
+      break;
+    case 'downloading': {
+      banner.hidden = false;
+      const pct = state.percent ? state.percent.toFixed(0) : '0';
+      msg.textContent = `Скачиваю обновление лаунчера: ${pct}%`;
+      btn.hidden = true;
+      break;
+    }
+    case 'ready':
+      banner.hidden = false;
+      msg.textContent = `Готово к установке: лаунчер v${state.version}`;
+      btn.hidden = false;
+      break;
+    case 'error':
+      // Don't pester the user with a banner for self-update errors — log only.
+      banner.hidden = true;
+      appendLog({
+        ts: new Date().toISOString(), level: 'warn', scope: 'self-update',
+        message: state.error ?? 'unknown error',
+      });
+      break;
+  }
+}
+
 async function bootstrap(): Promise<void> {
   api.onLog(appendLog);
   api.onUpdateState(applyState);
+  api.onSelfUpdate(applySelfUpdate);
+  els.selfUpdateBtn.addEventListener('click', () => { void api.selfUpdate.install(); });
 
   els.launchBtn.addEventListener('click', () => { void handleLaunch(); });
 

@@ -6,10 +6,8 @@ import { logger } from './logger';
 const DEFAULT_CONFIG: LauncherConfig = {
   name: 'EclipseFantasy',
   version: '0.1.0',
-  buildManifestUrl:
-    'https://github.com/MelQ29/mc-launcher/releases/latest/download/build_manifest.json',
-  uiManifestUrl:
-    'https://github.com/MelQ29/mc-launcher/releases/latest/download/ui_manifest.json',
+  buildManifestUrl: 'http://141.98.189.63/build_manifest.json',
+  uiManifestUrl: 'http://141.98.189.63/ui_manifest.json',
   signaturePublicKey: undefined,
   ramMb: 4096,
   installPath: null,

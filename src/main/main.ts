@@ -7,6 +7,7 @@ import { ConfigStore } from '../core/config';
 import { ManifestService } from '../manifest/manifest';
 import { InstanceStorage } from '../storage/instance';
 import { Updater } from '../update/updater';
+import { selfUpdater } from '../update/self-updater';
 import { GameLauncher } from '../launcher/launcher';
 import { registerIpc } from './ipc';
 
@@ -41,7 +42,14 @@ async function bootstrap(): Promise<void> {
   const updater = new Updater(paths, manifests, instance);
   const launcher = new GameLauncher(paths);
 
-  registerIpc({ paths, config, manifests, updater, launcher, instance, getWindow: () => mainWindow });
+  selfUpdater.init();
+  registerIpc({ paths, config, manifests, updater, launcher, instance, selfUpdater, getWindow: () => mainWindow });
+
+  // Kick off a self-update check shortly after the window is ready so it
+  // doesn't compete with the modpack manifest fetch on startup. Errors are
+  // swallowed; nothing should block the user from launching the modpack
+  // because the launcher itself can't reach the update server.
+  setTimeout(() => { void selfUpdater.check(); }, 4000);
 
   // Custom protocol so the renderer can address bundled and downloaded UI
   // assets uniformly via "ef-asset://logo.png" — the main process routes the

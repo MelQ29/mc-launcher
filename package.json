@@ -1,7 +1,7 @@
 {
   "name": "eclipse-fantasy-launcher",
   "productName": "EclipseFantasy",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Cross-platform Minecraft launcher for the EclipseFantasy modpack",
   "main": "dist/main/main/main.js",
   "author": {
@@ -23,6 +23,7 @@
     "lint": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit"
   },
   "dependencies": {
+    "electron-updater": "^6.8.3",
     "extract-zip": "^2.0.1"
   },
   "devDependencies": {
@@ -54,7 +55,9 @@
       {
         "from": "build",
         "to": "build",
-        "filter": ["icon.*"]
+        "filter": [
+          "icon.*"
+        ]
       },
       {
         "from": "config",
@@ -66,11 +69,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
@@ -90,11 +97,19 @@
       "target": [
         {
           "target": "AppImage",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "category": "Game",
       "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "MelQ29",
+      "repo": "mc-launcher",
+      "vPrefixedTagName": false
     }
   }
 }

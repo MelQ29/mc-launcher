@@ -4,6 +4,7 @@ import { promises as fs } from 'fs';
 import type { ConfigStore } from '../core/config';
 import type { ManifestService } from '../manifest/manifest';
 import type { Updater } from '../update/updater';
+import type { SelfUpdater, SelfUpdateState } from '../update/self-updater';
 import type { GameLauncher } from '../launcher/launcher';
 import type { Paths } from '../core/paths';
 import type { InstanceStorage } from '../storage/instance';
@@ -17,6 +18,7 @@ export interface IpcDeps {
   updater: Updater;
   launcher: GameLauncher;
   instance: InstanceStorage;
+  selfUpdater: SelfUpdater;
   getWindow: () => BrowserWindow | null;
 }
 
@@ -86,9 +88,16 @@ export function registerIpc(deps: IpcDeps): void {
     return `ef-asset://${safeRel}`; // protocol handler will return whatever exists / 404
   });
 
+  ipcMain.handle('self-update:check', async () => deps.selfUpdater.check());
+  ipcMain.handle('self-update:install', async () => deps.selfUpdater.installNow());
+  ipcMain.handle('self-update:state', async () => deps.selfUpdater.currentState);
+
   // Streams: forward updater state and log entries to the active window.
   deps.updater.on('state', (state: UpdateState) => {
     deps.getWindow()?.webContents.send('updater:state', state);
+  });
+  deps.selfUpdater.on('state', (state: SelfUpdateState) => {
+    deps.getWindow()?.webContents.send('self-update:state', state);
   });
   logger.on('entry', (entry: LogEntry) => {
     deps.getWindow()?.webContents.send('log:entry', entry);

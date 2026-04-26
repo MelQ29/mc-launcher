@@ -44,6 +44,14 @@ export interface LauncherConfig {
   requireValidSignature: boolean;
 }
 
+export interface SelfUpdateState {
+  status: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'not-available' | 'error';
+  version?: string;
+  percent?: number;
+  bytesPerSecond?: number;
+  error?: string;
+}
+
 export interface RendererApi {
   getConfig(): Promise<LauncherConfig>;
   saveConfig(patch: Partial<LauncherConfig>): Promise<LauncherConfig>;
@@ -62,4 +70,10 @@ export interface RendererApi {
   resolveAssetUrl(name: string): Promise<string>;
   onUpdateState(cb: (state: UpdateState) => void): () => void;
   onLog(cb: (entry: LogEntry) => void): () => void;
+  selfUpdate: {
+    check(): Promise<void>;
+    install(): Promise<void>;
+    state(): Promise<SelfUpdateState>;
+  };
+  onSelfUpdate(cb: (s: SelfUpdateState) => void): () => void;
 }
