@@ -1,5 +1,6 @@
 {
   "version": "2026.04.26-1",
+  "buildId": "eclipse",
   "minecraft": "1.20.1",
   "fabricLoader": "0.16.14",
   "archiveUrl": "https://github.com/MelQ29/mc-launcher/releases/download/build-2026.04.26-1/EclipseFantasy-modpack.zip",
@@ -27,5 +28,11 @@
       "size": 0
     }
   ],
+  "branding": {
+    "video": "background.mkv",
+    "playButton": "play_button.png",
+    "optionsButton": "options_button.png",
+    "replaceButton": "replace_button.png"
+  },
   "generatedAt": "2026-04-26T00:00:00Z"
 }
