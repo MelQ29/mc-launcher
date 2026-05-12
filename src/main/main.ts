@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, protocol, shell } from 'electron';
+import { app, BrowserWindow, dialog, net, protocol, shell } from 'electron';
+import { pathToFileURL } from 'url';
 import * as path from 'path';
 import { promises as fs } from 'fs';
 import { logger } from '../core/logger';
@@ -43,22 +44,35 @@ async function bootstrap(): Promise<void> {
 
   setTimeout(() => { void selfUpdater.check(); }, 4000);
 
-  protocol.registerFileProtocol('ef-asset', async (request, callback) => {
-    // URL is ef-asset://<buildId>/<name>
+  // Use the modern protocol.handle API (vs deprecated registerFileProtocol)
+  // because net.fetch supports HTTP Range requests, which the <video> element
+  // requires to play files larger than a few megabytes — registerFileProtocol
+  // returned the whole file as a single response and silently failed for the
+  // 86 MB Summermon mp4.
+  protocol.handle('ef-asset', async (request) => {
+    // ef-asset://<buildId>/<name> — strip query string before path resolution.
     const url = decodeURIComponent(request.url.replace(/^ef-asset:\/\//, ''));
-    const m = url.match(/^([a-z0-9-]+)\/(.+)$/i);
-    if (!m) { callback({ path: path.join(paths.bundledAssets, url) }); return; }
-    const [, bid, rel] = m;
-    const safeRel = rel.replace(/^[\\/]+/, '').replace(/\?.*$/, '');
-    const candidates = [
-      path.join(paths.uiCache(bid), safeRel),
-      path.join(paths.bundledAssets, `Iss_${safeRel}`),
-      path.join(paths.bundledAssets, safeRel),
-    ];
-    for (const c of candidates) {
-      try { await fs.access(c); callback({ path: c }); return; } catch { /* next */ }
+    const bare = url.replace(/\?.*$/, '');
+    const m = bare.match(/^([a-z0-9-]+)\/(.+)$/i);
+    let resolved: string | null = null;
+    if (!m) {
+      const candidate = path.join(paths.bundledAssets, bare);
+      try { await fs.access(candidate); resolved = candidate; } catch { /* fall through */ }
+    } else {
+      const [, bid, rel] = m;
+      const safeRel = rel.replace(/^[\\/]+/, '');
+      for (const c of [
+        path.join(paths.uiCache(bid), safeRel),
+        path.join(paths.bundledAssets, `Iss_${safeRel}`),
+        path.join(paths.bundledAssets, safeRel),
+      ]) {
+        try { await fs.access(c); resolved = c; break; } catch { /* next */ }
+      }
     }
-    callback({ path: candidates[candidates.length - 1] });
+    if (!resolved) return new Response('Not found', { status: 404 });
+    // Hand off to Electron's net.fetch for file:// — handles Range, MIME,
+    // streaming. Propagate the original request headers (especially Range).
+    return net.fetch(pathToFileURL(resolved).toString(), { headers: request.headers });
   });
 
   await app.whenReady();
