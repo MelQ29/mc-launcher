@@ -8,11 +8,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run build         # clean + build main (CommonJS) + renderer (ES2020) + copy renderer static assets
 npm run dev           # build then launch electron with --dev (opens DevTools detached)
 npm run lint          # tsc --noEmit for BOTH tsconfig.main.json and tsconfig.renderer.json
+npm test          # node:test runner; covers config, migration, registry, news, paths, dev-password
 npm run dist:win      # NSIS installer + portable EXE → release/
 npm run dist:linux    # AppImage → release/ (requires Linux/WSL; will not run on pure Windows)
 ```
 
-There is no test suite. "Lint" is type-checking only — there is no ESLint configured.
+"Lint" is type-checking only — there is no ESLint configured.
 
 `scripts/build-manifest.js`, `scripts/release-ui.js`, `scripts/sign-manifest.js` are operator tools for publishing modpack/UI releases, not part of the build. See README and `FORUPDATE.md` before invoking them.
 
@@ -26,6 +27,22 @@ The launcher pulls from two distinct origins, and a lot of the code only makes s
 - **Modpack content + UI assets** → an HTTP VPS (default `141.98.189.63`). The 2.4 GB modpack archive can't live in GitHub Releases, and UI images need to hot-swap without rebuilding the EXE.
 
 Hence two completely separate update paths inside the app: `src/update/self-updater.ts` (electron-updater, updates the EXE) and `src/update/updater.ts` (custom flow, updates the modpack instance). Don't conflate them.
+
+### Multi-build registry
+
+Лаунчер поддерживает несколько модпак-сборок одновременно. Реестр живёт в `builds.json`
+на VPS (`/var/www/eclipsefantasy/builds.json`); каждая сборка имеет свою папку
+`<id>/` с `build_manifest.json`, `ui_manifest.json`, `news.json`, и `ui/`. Локально
+лаунчер хранит per-build данные в `~/.config/EclipseFantasy/builds/<id>/`.
+
+Главный процесс держит `BuildRegistry` с `Map<id, BuildInstance>`; каждый
+`BuildInstance` владеет своими `Updater`, `ManifestService`, `NewsService`,
+`GameLauncher`. IPC-команды принимают опциональный `buildId` (null = активная сборка).
+См. `docs/superpowers/specs/2026-05-12-multi-modpack-design.md`.
+
+При запуске свежего лаунчера на старой установке (`userData/instance/`) выполняется
+одноразовая миграция в `userData/builds/eclipse/instance/` — игроки ничего не
+перекачивают. Логика в `src/core/migration.ts`.
 
 ### Main / renderer / preload boundary
 
