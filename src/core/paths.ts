@@ -71,6 +71,22 @@ export class Paths {
       path.join(instancePath, 'resourcepacks'),
       path.join(instancePath, 'cache'),
     ];
-    await Promise.all(dirs.map((d) => fs.mkdir(d, { recursive: true })));
+    await Promise.all(dirs.map(ensureDir));
+  }
+}
+
+/**
+ * Idempotent mkdir that tolerates a known Windows quirk: calling `fs.mkdir`
+ * on a drive root (e.g. `G:\\`) with `recursive: true` throws EPERM even
+ * though the directory already exists. If the path exists as a directory
+ * after the failed mkdir, that's fine — only re-throw for real failures.
+ */
+async function ensureDir(p: string): Promise<void> {
+  try {
+    await fs.mkdir(p, { recursive: true });
+  } catch (err) {
+    const stat = await fs.stat(p).catch(() => null);
+    if (stat?.isDirectory()) return;
+    throw err;
   }
 }
