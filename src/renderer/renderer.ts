@@ -245,11 +245,18 @@ async function bootstrap(): Promise<void> {
   api.onUpdateState((s) => {
     state.progressByBuild.set(s.buildId, s);
     if (state.activeBuildId === s.buildId) applyProgress(progressEls, s);
-    if (s.stage === 'ready' && state.activeBuildId === s.buildId) {
-      // Background UI-sync or full update just finished — re-apply branding
-      // so video/buttons swap from bundled fallback to per-build assets.
-      void renderActive();
-      void runUpdateCheck(s.buildId);
+    if (s.stage === 'ready') {
+      // UI sync or full update just finished — refresh build states from
+      // main (branding may have just been cached to disk) so the next
+      // renderActive() picks up per-build video/button filenames.
+      void (async () => {
+        const list = await api.listBuilds();
+        for (const ns of list.states) state.states.set(ns.id, ns);
+        if (state.activeBuildId === s.buildId) {
+          await renderActive();
+          void runUpdateCheck(s.buildId);
+        }
+      })();
     }
   });
   api.onNewsUpdated((m) => {

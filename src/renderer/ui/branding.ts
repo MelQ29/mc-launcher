@@ -22,15 +22,20 @@ export async function applyVideoAndButton(
     resolve(entry.id, playName),
   ]);
 
+  // Cache-bust ef-asset:// URLs so Chromium doesn't reuse a previously
+  // cached 404 (the file may have just been downloaded by runUiSync).
+  // The main-process protocol handler strips ?... before path resolution.
+  const bust = `?t=${Date.now()}`;
+
   video.pause();
-  video.src = videoUrl;
+  video.src = videoUrl + bust;
   video.load();
   video.play().catch(() => { /* fallback gradient stays */ });
   // Hide gradient fallback while video plays; show on error.
   video.addEventListener('playing', () => { fallback.style.opacity = '0'; }, { once: true });
   video.addEventListener('error', () => { fallback.style.opacity = '1'; }, { once: true });
 
-  btnImg.src = playUrl;
+  btnImg.src = playUrl + bust;
 }
 
 function shade(hex: string, percent: number): string {

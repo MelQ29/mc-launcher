@@ -96,6 +96,11 @@ export class Updater extends EventEmitter {
     try {
       await fs.mkdir(this.paths.uiCache(this.buildId), { recursive: true });
       this.setState({ stage: 'download-ui', message: 'Загружаю UI-ассеты...' });
+      // Fetch both manifests so branding (build_manifest.branding.video etc.)
+      // is cached on disk for BuildInstance.state() to read.
+      await this.manifests.fetchBuildManifest(
+        this.buildManifestUrl, config.signaturePublicKey, config.requireValidSignature,
+      );
       const { manifest: ui } = await this.manifests.fetchUiManifest(
         this.uiManifestUrl, config.signaturePublicKey, config.requireValidSignature,
       );
