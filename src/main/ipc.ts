@@ -2,74 +2,93 @@ import { BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import * as path from 'path';
 import { promises as fs } from 'fs';
 import type { ConfigStore } from '../core/config';
-import type { ManifestService } from '../manifest/manifest';
-import type { Updater } from '../update/updater';
+import type { BuildRegistry } from '../builds/registry';
 import type { SelfUpdater, SelfUpdateState } from '../update/self-updater';
-import type { GameLauncher } from '../launcher/launcher';
 import type { Paths } from '../core/paths';
-import type { InstanceStorage } from '../storage/instance';
-import type { LogEntry, UpdateState } from '../core/types';
+import type { LogEntry, UpdateState, BuildId, PerBuildConfig } from '../core/types';
 import { logger } from '../core/logger';
+import { verifyDevPassword } from '../core/dev-password';
 
 export interface IpcDeps {
   paths: Paths;
   config: ConfigStore;
-  manifests: ManifestService;
-  updater: Updater;
-  launcher: GameLauncher;
-  instance: InstanceStorage;
+  registry: BuildRegistry;
   selfUpdater: SelfUpdater;
   getWindow: () => BrowserWindow | null;
 }
 
-/**
- * Wires up all IPC channels exposed to the renderer. The renderer never
- * touches the file system or network directly — every privileged operation
- * goes through this layer, which is what lets us keep contextIsolation on
- * and sandbox the renderer.
- */
 export function registerIpc(deps: IpcDeps): void {
-  ipcMain.handle('config:get', async () => deps.config.current);
-  ipcMain.handle('config:save', async (_evt, patch: Record<string, unknown>) => {
-    const updated = await deps.config.save(patch);
-    return updated;
-  });
+  const activeOr = (id: string | null | undefined): BuildId =>
+    (id ?? deps.config.current.activeBuildId);
 
-  ipcMain.handle('updater:installedVersion', async () => deps.updater.installedVersion());
-  ipcMain.handle('updater:check', async () => {
-    const cfg = deps.config.current;
+  // === Config ===
+  ipcMain.handle('config:get', async () => deps.config.current);
+  ipcMain.handle('config:save', async (_e, patch) => deps.config.save(patch));
+  ipcMain.handle('config:saveBuild', async (_e, id: BuildId, patch: Partial<PerBuildConfig>) =>
+    deps.config.saveBuildConfig(id, patch),
+  );
+
+  // === Builds ===
+  ipcMain.handle('builds:list', async () => ({
+    registry: deps.registry.current(),
+    states: await deps.registry.allStates(),
+    activeBuildId: deps.config.current.activeBuildId,
+  }));
+  ipcMain.handle('builds:setActive', async (_e, id: BuildId) => deps.registry.setActive(id));
+  ipcMain.handle('builds:refresh', async () => deps.registry.refresh());
+
+  // === Updater (per-build) ===
+  ipcMain.handle('updater:installedVersion', async (_e, id?: BuildId) =>
+    deps.registry.get(activeOr(id)).installedVersion(),
+  );
+  ipcMain.handle('updater:check', async (_e, id?: BuildId) => {
+    const inst = deps.registry.get(activeOr(id));
     try {
-      return await deps.updater.checkForUpdates(cfg);
+      const manifest = await inst.getBuildManifest();
+      const lock = await inst.manifests.readLock();
+      const ui = await inst.manifests.fetchUiManifest(
+        inst.entry.uiManifestUrl,
+        deps.config.current.signaturePublicKey,
+        deps.config.current.requireValidSignature,
+      );
+      const needsUpdate =
+        !lock || lock.buildVersion !== manifest.version || lock.archiveSha256 !== manifest.archiveSha256;
+      return {
+        buildVersion: manifest.version, uiVersion: ui.manifest.version, needsUpdate,
+        recommendedRamMb: manifest.recommendedRamMb, minRamMb: manifest.minRamMb,
+      };
     } catch (err) {
-      // First-run with no GitHub release yet, or no network: surface as a
-      // structured "unknown" response so the renderer can show a friendly
-      // state instead of an error toast in the main console.
       const message = (err as Error).message;
-      logger.warn('ipc', `check failed: ${message}`);
+      logger.warn('ipc', `check failed for ${inst.id}: ${message}`);
       return { buildVersion: 'unknown', uiVersion: 'unknown', needsUpdate: false, error: message };
     }
   });
-  ipcMain.handle('updater:run', async () => {
-    const cfg = deps.config.current;
-    await deps.updater.runUpdate(cfg);
+  ipcMain.handle('updater:run', async (_e, id?: BuildId) => {
+    const inst = deps.registry.get(activeOr(id));
+    await inst.ensureDirs();
+    await inst.updater.runUpdate(deps.config.current);
   });
 
-  ipcMain.handle('launcher:launch', async () => {
-    const cfg = deps.config.current;
-    const { manifest } = await deps.manifests.fetchBuildManifest(
-      cfg.buildManifestUrl, cfg.signaturePublicKey, cfg.requireValidSignature,
+  // === Launcher ===
+  ipcMain.handle('launcher:play', async (_e, id?: BuildId) => {
+    const inst = deps.registry.get(activeOr(id));
+    const manifest = await inst.getBuildManifest();
+    return inst.launcher.launch(
+      inst.perBuildConfig(),
+      inst.instanceRoot(),
+      manifest.minecraft, manifest.fabricLoader,
+      inst.entry.displayName,
     );
-    const result = await deps.launcher.launch(cfg, deps.instance.path, manifest.minecraft, manifest.fabricLoader);
-    logger.info('launcher', `launch result: ok=${result.ok} profile=${result.profileId}`);
-    return result;
   });
 
-  // Inspection helpers — used by the settings modal so the user can see
-  // exactly which directory is being managed and verify a fresh install
-  // really landed there.
-  ipcMain.handle('paths:installInfo', async () => {
-    const cfg = deps.config.current;
-    const root = deps.instance.path;
+  // === News ===
+  ipcMain.handle('news:fetch', async (_e, id: BuildId) => deps.registry.get(id).news.fetch());
+
+  // === Paths / install info ===
+  ipcMain.handle('paths:installInfo', async (_e, id?: BuildId) => {
+    const inst = deps.registry.get(activeOr(id));
+    const root = inst.instanceRoot();
+    const cfg = inst.perBuildConfig();
     const exists = await fs.stat(root).then((s) => s.isDirectory()).catch(() => false);
     const counts: Record<string, number> = {};
     let totalBytes = 0;
@@ -80,7 +99,6 @@ export function registerIpc(deps: IpcDeps): void {
           counts[sub] = entries.filter((e) => e.isFile()).length;
         } catch { counts[sub] = 0; }
       }
-      // Walk root for total size (one level — we don't need exact recursion).
       try {
         const stack: string[] = [root];
         const seen = new Set<string>();
@@ -88,27 +106,21 @@ export function registerIpc(deps: IpcDeps): void {
           const dir = stack.pop()!;
           if (seen.has(dir)) continue;
           seen.add(dir);
-          const entries = await fs.readdir(dir, { withFileTypes: true });
-          for (const e of entries) {
-            const full = path.join(dir, e.name);
-            if (e.isDirectory()) stack.push(full);
-            else if (e.isFile()) {
+          for (const ent of await fs.readdir(dir, { withFileTypes: true })) {
+            const full = path.join(dir, ent.name);
+            if (ent.isDirectory()) stack.push(full);
+            else if (ent.isFile()) {
               try { totalBytes += (await fs.stat(full)).size; } catch { /* ignore */ }
             }
           }
         }
-      } catch { /* ignore — show what we have */ }
+      } catch { /* ignore */ }
     }
-    return {
-      path: root,
-      isCustomPath: cfg.installPath !== null,
-      exists,
-      counts,
-      totalBytes,
-    };
+    return { path: root, isCustomPath: cfg.installPath !== null, exists, counts, totalBytes };
   });
-  ipcMain.handle('paths:openInstallFolder', async () => {
-    const root = deps.instance.path;
+  ipcMain.handle('paths:openInstallFolder', async (_e, id?: BuildId) => {
+    const inst = deps.registry.get(activeOr(id));
+    const root = inst.instanceRoot();
     await fs.mkdir(root, { recursive: true });
     const err = await shell.openPath(root);
     if (err) logger.warn('ipc', `openPath failed: ${err}`);
@@ -124,27 +136,58 @@ export function registerIpc(deps: IpcDeps): void {
     return r.filePaths[0];
   });
 
-  ipcMain.handle('assets:resolve', async (_evt, name: string) => {
+  // === Assets ===
+  ipcMain.handle('assets:resolve', async (_e, id: BuildId, name: string) => {
+    const safeId = String(id).replace(/[^a-z0-9-]/gi, '');
     const safeRel = String(name).replace(/^[\\/]+/, '').replace(/\?.*$/, '');
     const candidates = [
-      path.join(deps.paths.uiCache, safeRel),
+      path.join(deps.paths.uiCache(safeId), safeRel),
       path.join(deps.paths.bundledAssets, `Iss_${safeRel}`),
       path.join(deps.paths.bundledAssets, safeRel),
     ];
     for (const c of candidates) {
-      try { await fs.access(c); return `ef-asset://${safeRel}`; }
+      try { await fs.access(c); return `ef-asset://${safeId}/${safeRel}`; }
       catch { /* try next */ }
     }
-    return `ef-asset://${safeRel}`; // protocol handler will return whatever exists / 404
+    return `ef-asset://${safeId}/${safeRel}`;
   });
 
+  // === Dev mode ===
+  ipcMain.handle('dev-mode:unlock', async (_e, password: string) => {
+    const ok = verifyDevPassword(String(password ?? ''));
+    if (ok) await deps.config.save({ developerMode: true });
+    return ok;
+  });
+  ipcMain.handle('dev-mode:isUnlocked', async () => deps.config.current.developerMode);
+  ipcMain.handle('dev:resetUiCache', async (_e, id?: BuildId) => {
+    if (!deps.config.current.developerMode) throw new Error('developerMode required');
+    await deps.registry.get(activeOr(id)).resetUiCache();
+  });
+  ipcMain.handle('dev:resetManifestLock', async (_e, id?: BuildId) => {
+    if (!deps.config.current.developerMode) throw new Error('developerMode required');
+    await deps.registry.get(activeOr(id)).resetManifestLock();
+  });
+
+  // === Self-update (unchanged) ===
   ipcMain.handle('self-update:check', async () => deps.selfUpdater.check());
   ipcMain.handle('self-update:install', async () => deps.selfUpdater.installNow());
   ipcMain.handle('self-update:state', async () => deps.selfUpdater.currentState);
 
-  // Streams: forward updater state and log entries to the active window.
-  deps.updater.on('state', (state: UpdateState) => {
-    deps.getWindow()?.webContents.send('updater:state', state);
+  // === Streams: forward per-build updater + news state to renderer ===
+  for (const entry of deps.registry.current().builds) {
+    const inst = deps.registry.get(entry.id);
+    inst.on('state', (state: UpdateState) => {
+      deps.getWindow()?.webContents.send('updater:state', state);
+    });
+    inst.on('news-updated', (payload) => {
+      deps.getWindow()?.webContents.send('news:updated', payload);
+    });
+  }
+  deps.registry.on('builds-changed', (reg) => {
+    deps.getWindow()?.webContents.send('registry:builds-changed', reg);
+  });
+  deps.registry.on('active-changed', (msg) => {
+    deps.getWindow()?.webContents.send('registry:active-changed', msg);
   });
   deps.selfUpdater.on('state', (state: SelfUpdateState) => {
     deps.getWindow()?.webContents.send('self-update:state', state);
