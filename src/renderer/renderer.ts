@@ -3,11 +3,11 @@ import type {
   BuildsRegistry, BuildEntry, BuildState, BuildId, NewsEntry,
   SelfUpdateState,
 } from './api';
-import { applyAccent, applyVideoAndButton } from './ui/branding';
-import { renderTabs, setActiveTab } from './ui/tabs';
-import { renderNews } from './ui/news-panel';
-import { applyProgress, type ProgressEls } from './ui/progress';
-import { SettingsModal } from './ui/settings-modal';
+import { applyAccent, applyVideoAndButton } from './ui/branding.js';
+import { renderTabs, setActiveTab } from './ui/tabs.js';
+import { renderNews } from './ui/news-panel.js';
+import { applyProgress, type ProgressEls } from './ui/progress.js';
+import { SettingsModal } from './ui/settings-modal.js';
 
 declare global { interface Window { eclipseApi: RendererApi; } }
 
