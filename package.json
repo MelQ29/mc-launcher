@@ -1,8 +1,8 @@
 {
   "name": "eclipse-fantasy-launcher",
   "productName": "EclipseFantasy",
-  "version": "0.1.3",
-  "description": "Cross-platform Minecraft launcher for the EclipseFantasy modpack",
+  "version": "0.2.0",
+  "description": "Cross-platform multi-modpack Minecraft launcher (Eclipse Fantasy + FTB Summermon)",
   "main": "dist/main/main/main.js",
   "author": {
     "name": "EclipseFantasy",
