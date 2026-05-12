@@ -48,7 +48,7 @@ function walk(root, base = root, out = []) {
 
 async function main() {
   const args = parseArgs(process.argv);
-  const required = ['instance', 'archive', 'version', 'minecraft', 'fabric', 'archive-url', 'out'];
+  const required = ['build-id', 'instance', 'archive', 'version', 'minecraft', 'fabric', 'archive-url', 'out'];
   for (const r of required) {
     if (!args[r]) {
       console.error(`Missing --${r}`);
@@ -83,6 +83,15 @@ async function main() {
     files,
     generatedAt: new Date().toISOString(),
   };
+  if (args['build-id']) manifest.buildId = args['build-id'];
+  if (args['branding-video'] || args['branding-play']) {
+    manifest.branding = {
+      video: args['branding-video'] ?? 'background.mkv',
+      playButton: args['branding-play'] ?? 'play_button.png',
+      optionsButton: args['branding-options'] ?? 'options_button.png',
+      replaceButton: args['branding-replace'] ?? 'replace_button.png',
+    };
+  }
   fs.writeFileSync(args.out, JSON.stringify(manifest, null, 2));
   console.log(`Wrote ${args.out} (${files.length} files, archive ${archiveStat.size} bytes)`);
 }
