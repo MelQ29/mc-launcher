@@ -116,6 +116,24 @@ async function createWindow(): Promise<void> {
   if (process.argv.includes('--dev')) win.webContents.openDevTools({ mode: 'detach' });
 }
 
+// Register the ef-asset:// scheme as privileged BEFORE app.whenReady().
+// The `stream: true` privilege is what makes <video>/<audio> request Range
+// (bytes=N-) headers and treat the response as a streaming body — without
+// it, Chromium tries to buffer the whole response synchronously and silently
+// fails on large files like the 86 MB Summermon background.mp4.
+// See https://www.electronjs.org/docs/latest/api/protocol
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'ef-asset',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+    },
+  },
+]);
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });

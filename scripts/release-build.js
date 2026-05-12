@@ -14,6 +14,10 @@
  *     --archive-url http://141.98.189.63/EclipseFantasy-v1.0.5.zip \
  *     [--recommended-ram 6144]
  *     [--upload-archive]
+ *     [--branding-video background.mp4]       (default: auto-detect from assets/<id>-ui/)
+ *     [--branding-play play_button.png]
+ *     [--branding-options options_button.png]
+ *     [--branding-replace replace_button.png]
  */
 const fs = require('fs');
 const path = require('path');
@@ -44,6 +48,19 @@ const VPS_ALIAS = process.env.EF_VPS_SSH_ALIAS || 'darkfantasy_vps';
 const outLocal = `manifests/${buildId}_build_manifest.json`;
 fs.mkdirSync('manifests', { recursive: true });
 
+// Auto-detect the per-build video filename from assets/<id>-ui/ unless the
+// operator overrode it. The renderer's <video> src maps directly to this
+// name via ef-asset://<id>/<video>, so it MUST match the actual file in
+// the published UI assets (mkv for Eclipse, mp4 for Summermon, etc.).
+function detectVideo() {
+  if (args['branding-video']) return args['branding-video'];
+  const assetsDir = `assets/${buildId}-ui`;
+  if (!fs.existsSync(assetsDir)) return 'background.mkv';  // fallback
+  const videoExt = /\.(mkv|mp4|webm|mov)$/i;
+  const f = fs.readdirSync(assetsDir).find((n) => /^background\./i.test(n) && videoExt.test(n));
+  return f || 'background.mkv';
+}
+
 const subArgs = [
   'scripts/build-manifest.js',
   '--build-id', buildId,
@@ -54,10 +71,10 @@ const subArgs = [
   '--fabric', args.fabric,
   '--archive-url', args['archive-url'],
   '--out', outLocal,
-  '--branding-video', 'background.mkv',
-  '--branding-play', 'play_button.png',
-  '--branding-options', 'options_button.png',
-  '--branding-replace', 'replace_button.png',
+  '--branding-video', detectVideo(),
+  '--branding-play', args['branding-play'] || 'play_button.png',
+  '--branding-options', args['branding-options'] || 'options_button.png',
+  '--branding-replace', args['branding-replace'] || 'replace_button.png',
 ];
 run('node', subArgs);
 
