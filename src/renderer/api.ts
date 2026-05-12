@@ -1,87 +1,71 @@
-// Renderer-side type mirror of src/core/types.ts.
-//
-// We keep a separate copy because the renderer's tsconfig deliberately does
-// not pull in main-process modules (no node types, different module target).
-// If you change one of these, change the other.
+export type {
+  LauncherConfig, PerBuildConfig, UpdateState, LogEntry,
+  BuildsRegistry, BuildEntry, BuildId, BuildState, NewsEntry,
+} from '../core/types';
+import type {
+  LauncherConfig, PerBuildConfig, UpdateState, LogEntry,
+  BuildsRegistry, BuildEntry, BuildId, BuildState, NewsEntry,
+} from '../core/types';
+export type { SelfUpdateState } from '../update/self-updater';
+import type { SelfUpdateState } from '../update/self-updater';
 
-export interface DownloadProgress {
-  totalBytes: number;
-  downloadedBytes: number;
-  filesDone: number;
-  filesTotal: number;
-  current?: string;
-  speed?: number;
+export interface BuildsListResponse {
+  registry: BuildsRegistry;
+  states: BuildState[];
+  activeBuildId: BuildId;
 }
 
-export type UpdateStage =
-  | 'idle' | 'check' | 'download-archive' | 'extract' | 'verify'
-  | 'download-ui' | 'cleanup' | 'ready' | 'launching' | 'error';
-
-export interface UpdateState {
-  stage: UpdateStage;
-  message: string;
-  progress?: DownloadProgress;
-  error?: string;
-}
-
-export interface LogEntry {
-  ts: string;
-  level: 'debug' | 'info' | 'warn' | 'error';
-  scope: string;
-  message: string;
-}
-
-export interface LauncherConfig {
-  name: string;
-  version: string;
-  buildManifestUrl: string;
-  uiManifestUrl: string;
-  signaturePublicKey?: string;
-  ramMb: number;
-  installPath: string | null;
-  downloadConcurrency: number;
-  downloadRetries: number;
-  requireValidSignature: boolean;
-}
-
-export interface SelfUpdateState {
-  status: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'not-available' | 'error';
-  version?: string;
-  percent?: number;
-  bytesPerSecond?: number;
+export interface UpdateCheckResult {
+  buildVersion: string;
+  uiVersion: string;
+  needsUpdate: boolean;
+  recommendedRamMb?: number;
+  minRamMb?: number;
   error?: string;
 }
 
 export interface RendererApi {
   getConfig(): Promise<LauncherConfig>;
   saveConfig(patch: Partial<LauncherConfig>): Promise<LauncherConfig>;
-  getInstalledVersion(): Promise<string | null>;
-  checkForUpdates(): Promise<{
-    buildVersion: string;
-    uiVersion: string;
-    needsUpdate: boolean;
-    recommendedRamMb?: number;
-    minRamMb?: number;
-    error?: string;
-  }>;
-  runUpdate(): Promise<void>;
-  launchGame(): Promise<{ ok: boolean; profileId: string }>;
+  saveBuildConfig(id: BuildId, patch: Partial<PerBuildConfig>): Promise<PerBuildConfig>;
+
+  listBuilds(): Promise<BuildsListResponse>;
+  setActiveBuild(id: BuildId): Promise<BuildState>;
+  refreshBuilds(): Promise<BuildsRegistry>;
+
+  getInstalledVersion(id?: BuildId): Promise<string | null>;
+  checkForUpdates(id?: BuildId): Promise<UpdateCheckResult>;
+  runUpdate(id?: BuildId): Promise<void>;
+
+  launchGame(id?: BuildId): Promise<{ ok: boolean; profileId: string }>;
+
+  fetchNews(id: BuildId): Promise<{ entries: NewsEntry[]; fromCache: boolean }>;
+
   pickInstallPath(): Promise<string | null>;
-  getInstallInfo(): Promise<{
-    path: string;
-    isCustomPath: boolean;
-    exists: boolean;
-    counts: Record<string, number>;
-    totalBytes: number;
+  getInstallInfo(id?: BuildId): Promise<{
+    path: string; isCustomPath: boolean; exists: boolean;
+    counts: Record<string, number>; totalBytes: number;
   }>;
-  openInstallFolder(): Promise<string>;
-  resolveAssetUrl(name: string): Promise<string>;
-  onUpdateState(cb: (state: UpdateState) => void): () => void;
-  onLog(cb: (entry: LogEntry) => void): () => void;
+  openInstallFolder(id?: BuildId): Promise<string>;
+  resolveAssetUrl(id: BuildId, name: string): Promise<string>;
+
+  devMode: {
+    unlock(password: string): Promise<boolean>;
+    isUnlocked(): Promise<boolean>;
+    resetUiCache(id?: BuildId): Promise<void>;
+    resetManifestLock(id?: BuildId): Promise<void>;
+  };
+
   selfUpdate: {
     check(): Promise<void>;
     install(): Promise<void>;
     state(): Promise<SelfUpdateState>;
   };
+
+  onUpdateState(cb: (s: UpdateState) => void): () => void;
+  onLog(cb: (entry: LogEntry) => void): () => void;
+  onNewsUpdated(cb: (msg: { buildId: BuildId; entries: NewsEntry[] }) => void): () => void;
+  onRegistryChanged(cb: (reg: BuildsRegistry) => void): () => void;
+  onActiveChanged(cb: (msg: { id: BuildId }) => void): () => void;
   onSelfUpdate(cb: (s: SelfUpdateState) => void): () => void;
 }
