@@ -47,6 +47,21 @@ export class Updater extends EventEmitter {
 
   get currentState(): UpdateState { return this.state; }
 
+  /**
+   * Public hook used by GameLauncher to surface launch-time progress
+   * (e.g. "Скачиваю NeoForge installer", "Устанавливаю NeoForge...").
+   * Emits a regular `state` event that the renderer's progress block
+   * already listens to — no extra wiring needed.
+   */
+  publishLaunchingState(message: string): void {
+    this.setState({ stage: 'launching', message, progress: undefined });
+  }
+
+  /** Reset to idle from the renderer-visible stream (e.g. after launch). */
+  publishIdleState(): void {
+    this.setState({ stage: 'idle', message: 'idle', progress: undefined });
+  }
+
   private setState(s: Partial<UpdateState>): void {
     this.state = { ...this.state, ...s, buildId: this.buildId };
     this.emit('state', this.state);

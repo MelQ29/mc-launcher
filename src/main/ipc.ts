@@ -77,13 +77,25 @@ export function registerIpc(deps: IpcDeps): void {
     // explicit `modloader` + `loaderVersion`. Default to fabric.
     const modloader = manifest.modloader ?? 'fabric';
     const loaderVersion = manifest.loaderVersion ?? manifest.fabricLoader ?? '';
-    return inst.launcher.launch(
-      inst.perBuildConfig(),
-      inst.instanceRoot(),
-      manifest.minecraft, loaderVersion,
-      inst.entry.displayName,
-      modloader,
-    );
+    try {
+      const result = await inst.launcher.launch(
+        inst.perBuildConfig(),
+        inst.instanceRoot(),
+        manifest.minecraft, loaderVersion,
+        inst.entry.displayName,
+        modloader,
+        // Pipe launch-time status messages through the existing update-state
+        // stream so the renderer's progress block surfaces what's happening
+        // (NeoForge installer, profile write, Mojang Launcher spawn).
+        (msg) => inst.updater.publishLaunchingState(msg),
+      );
+      // Reset back to idle so the progress block hides on success.
+      inst.updater.publishIdleState();
+      return result;
+    } catch (err) {
+      inst.updater.publishIdleState();
+      throw err;
+    }
   });
 
   // === News ===

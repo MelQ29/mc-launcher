@@ -40,12 +40,15 @@ export class GameLauncher {
     loaderVersion: string,
     buildDisplayName: string,
     modloader: Modloader = 'fabric',
+    onStatus: (message: string) => void = () => {},
   ): Promise<{ ok: boolean; profileId: string }> {
     const dotMc = Paths.defaultDotMinecraft();
     const lastVersionId = this.lastVersionIdFor(modloader, minecraft, loaderVersion);
 
-    await this.ensureLoaderVersion(dotMc, minecraft, modloader, loaderVersion);
+    await this.ensureLoaderVersion(dotMc, minecraft, modloader, loaderVersion, onStatus);
+    onStatus('Готовлю профиль Minecraft Launcher…');
     await this.writeProfile(dotMc, instancePath, perBuildCfg, lastVersionId, buildDisplayName);
+    onStatus('Открываю Minecraft Launcher…');
 
     // Try, in order: a known .exe path → minecraft:// URI handler → UWP shell
     // appsFolder route. The first one that doesn't throw wins. Each method
@@ -93,11 +96,13 @@ export class GameLauncher {
     minecraft: string,
     modloader: Modloader,
     loaderVersion: string,
+    onStatus: (message: string) => void,
   ): Promise<void> {
     if (modloader === 'neoforge') {
-      await this.ensureNeoForgeVersion(dotMc, minecraft, loaderVersion);
+      await this.ensureNeoForgeVersion(dotMc, minecraft, loaderVersion, onStatus);
       return;
     }
+    onStatus(`Готовлю Fabric ${loaderVersion}…`);
     await this.ensureFabricVersion(dotMc, minecraft, loaderVersion);
   }
 
@@ -134,7 +139,12 @@ export class GameLauncher {
    *
    * Idempotent: skipped if the version JSON already exists.
    */
-  private async ensureNeoForgeVersion(dotMc: string, minecraft: string, loaderVersion: string): Promise<void> {
+  private async ensureNeoForgeVersion(
+    dotMc: string,
+    minecraft: string,
+    loaderVersion: string,
+    onStatus: (message: string) => void,
+  ): Promise<void> {
     const id = `neoforge-${loaderVersion}`;
     const versionJson = path.join(dotMc, 'versions', id, `${id}.json`);
     try {
@@ -153,18 +163,21 @@ export class GameLauncher {
       await fs.access(installerPath);
       logger.info('launcher', `Reusing cached NeoForge installer: ${installerPath}`);
     } catch {
+      onStatus(`Скачиваю NeoForge ${loaderVersion} installer…`);
       logger.info('launcher', `Downloading NeoForge installer ${loaderVersion} from ${installerUrl}`);
       const { Downloader } = await import('../downloader/downloader');
       const dl = new Downloader(1);
       await dl.downloadOne({ url: installerUrl, dest: installerPath, retries: 3 });
     }
 
+    onStatus('Ищу Java…');
     const java = await findJava();
     if (!java) {
       throw new Error(
         'Java не найден на этом компьютере. Установи OpenJDK 17+ (https://adoptium.net/) и перезапусти лаунчер.',
       );
     }
+    onStatus(`Устанавливаю NeoForge ${loaderVersion} (1–5 мин, качает либы и патчит Minecraft)…`);
     logger.info('launcher', `Running NeoForge installer with ${java} ...`);
     await new Promise<void>((resolve, reject) => {
       // -Djava.awt.headless=true suppresses the installer's GUI window so
