@@ -5,7 +5,8 @@
  * manifest to the latest GitHub release.
  *
  * Pre-requisites:
- *   - SSH alias `eclipse-vps` configured in ~/.ssh/config
+ *   - SSH alias `darkfantasy_vps` configured in ~/.ssh/config
+ *     (override with env var EF_VPS_SSH_ALIAS=<alias> if you use a different name)
  *   - `gh` CLI authenticated against the repo
  *   - python + paramiko available (used by sftp-upload.py)
  *
@@ -26,6 +27,9 @@ const ASSETS = [
 const ARCHIVE_BASE_URL = 'http://141.98.189.63/ui';
 const REPO = 'MelQ29/mc-launcher';
 const RELEASE_TAG = 'v1.0.5';
+// SSH alias (configured in ~/.ssh/config) used for SFTP uploads.
+// Override with EF_VPS_SSH_ALIAS=<alias> if your local config uses a different name.
+const VPS_ALIAS = process.env.EF_VPS_SSH_ALIAS || 'darkfantasy_vps';
 
 function sha256(file) {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -66,7 +70,7 @@ function main() {
 
   // Upload each asset to the VPS via the existing sftp-upload helper.
   for (const a of ASSETS) {
-    run('python', ['-u', 'scripts/sftp-upload.py', 'eclipse-vps', a.local, a.vps], {
+    run('python', ['-u', 'scripts/sftp-upload.py', VPS_ALIAS, a.local, a.vps], {
       env: { ...process.env, MSYS_NO_PATHCONV: '1' },
     });
   }
@@ -87,11 +91,11 @@ function main() {
 
   // Sync the manifest itself to the VPS so the launcher (which now reads
   // manifests from there, not from GitHub) sees the new version.
-  run('python', ['-u', 'scripts/sftp-upload.py', 'eclipse-vps', 'ui_manifest.json', '/var/www/eclipsefantasy/ui_manifest.json'], {
+  run('python', ['-u', 'scripts/sftp-upload.py', VPS_ALIAS, 'ui_manifest.json', '/var/www/eclipsefantasy/ui_manifest.json'], {
     env: { ...process.env, MSYS_NO_PATHCONV: '1' },
   });
   if (fs.existsSync('build_manifest.json')) {
-    run('python', ['-u', 'scripts/sftp-upload.py', 'eclipse-vps', 'build_manifest.json', '/var/www/eclipsefantasy/build_manifest.json'], {
+    run('python', ['-u', 'scripts/sftp-upload.py', VPS_ALIAS, 'build_manifest.json', '/var/www/eclipsefantasy/build_manifest.json'], {
       env: { ...process.env, MSYS_NO_PATHCONV: '1' },
     });
   }
