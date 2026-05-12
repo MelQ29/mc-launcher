@@ -94,10 +94,17 @@ export function registerIpc(deps: IpcDeps): void {
     const inst = deps.registry.get(activeOr(id));
     const root = inst.instanceRoot();
     const cfg = inst.perBuildConfig();
-    const exists = await fs.stat(root).then((s) => s.isDirectory()).catch(() => false);
+    // Only treat the path as "installed" when manifest.lock confirms we
+    // actually own files here. Without this check, a user pointing
+    // installPath at a drive root (G:\) or any populated directory would
+    // see the launcher report the unrelated content as the modpack's size
+    // — triggering spurious "already installed" warnings.
+    const installedVersion = await inst.installedVersion();
+    const installed = installedVersion !== null;
+    const rootExists = await fs.stat(root).then((s) => s.isDirectory()).catch(() => false);
     const counts: Record<string, number> = {};
     let totalBytes = 0;
-    if (exists) {
+    if (installed && rootExists) {
       for (const sub of ['mods', 'config', 'resourcepacks', 'shaderpacks', 'datapacks']) {
         try {
           const entries = await fs.readdir(path.join(root, sub), { withFileTypes: true });
@@ -121,7 +128,7 @@ export function registerIpc(deps: IpcDeps): void {
         }
       } catch { /* ignore */ }
     }
-    return { path: root, isCustomPath: cfg.installPath !== null, exists, counts, totalBytes };
+    return { path: root, isCustomPath: cfg.installPath !== null, exists: installed, counts, totalBytes };
   });
   ipcMain.handle('paths:openInstallFolder', async (_e, id?: BuildId) => {
     const inst = deps.registry.get(activeOr(id));
