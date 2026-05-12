@@ -36,7 +36,10 @@ export class BuildInstance extends EventEmitter {
       deps.paths.uiManifestCache(this.id),
       deps.paths.manifestLockFile(this.id),
     );
-    this.updater = new Updater(this.id, deps.paths, this.manifests, this.instanceRoot());
+    this.updater = new Updater(
+      this.id, deps.paths, this.manifests, this.instanceRoot(),
+      deps.entry.buildManifestUrl, deps.entry.uiManifestUrl,
+    );
     this.news = new NewsService(this.id, deps.entry.newsUrl, deps.paths.newsCache(this.id));
     this.launcher = new GameLauncher(this.id, deps.paths);
 

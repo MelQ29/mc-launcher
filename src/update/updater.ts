@@ -38,6 +38,8 @@ export class Updater extends EventEmitter {
     private readonly paths: Paths,
     private readonly manifests: ManifestService,
     private readonly instancePath: string,
+    private readonly buildManifestUrl: string,
+    private readonly uiManifestUrl: string,
   ) {
     super();
     this.state = { buildId, stage: 'idle', message: 'idle' };
@@ -66,8 +68,8 @@ export class Updater extends EventEmitter {
   }> {
     this.setState({ stage: 'check', message: 'Проверка обновлений...' });
     const [{ manifest: build }, { manifest: ui }] = await Promise.all([
-      this.manifests.fetchBuildManifest(config.buildManifestUrl, config.signaturePublicKey, config.requireValidSignature),
-      this.manifests.fetchUiManifest(config.uiManifestUrl, config.signaturePublicKey, config.requireValidSignature),
+      this.manifests.fetchBuildManifest(this.buildManifestUrl, config.signaturePublicKey, config.requireValidSignature),
+      this.manifests.fetchUiManifest(this.uiManifestUrl, config.signaturePublicKey, config.requireValidSignature),
     ]);
     const lock = await this.manifests.readLock();
     const needsUpdate =
@@ -92,10 +94,10 @@ export class Updater extends EventEmitter {
 
       this.setState({ stage: 'check', message: 'Загружаю манифест сборки...' });
       const { manifest: build, offline } = await this.manifests.fetchBuildManifest(
-        config.buildManifestUrl, config.signaturePublicKey, config.requireValidSignature,
+        this.buildManifestUrl, config.signaturePublicKey, config.requireValidSignature,
       );
       const { manifest: ui } = await this.manifests.fetchUiManifest(
-        config.uiManifestUrl, config.signaturePublicKey, config.requireValidSignature,
+        this.uiManifestUrl, config.signaturePublicKey, config.requireValidSignature,
       );
 
       const lock = await this.manifests.readLock();
