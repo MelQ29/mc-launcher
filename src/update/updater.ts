@@ -15,7 +15,6 @@ import { Downloader } from '../downloader/downloader';
 import { extractArchive, discardArchive } from '../downloader/archive';
 import { sha256File, verifyFile } from '../downloader/hash';
 import { diffAgainstManifest, removeManaged, makeLock } from '../manifest/differ';
-import { InstanceStorage } from '../storage/instance';
 import { logger } from '../core/logger';
 import type { Paths } from '../core/paths';
 
@@ -32,18 +31,22 @@ import type { Paths } from '../core/paths';
  * of polluting the live instance.
  */
 export class Updater extends EventEmitter {
-  private state: UpdateState = { stage: 'idle', message: 'idle' };
+  private state: UpdateState;
 
   constructor(
+    private readonly buildId: string,
     private readonly paths: Paths,
     private readonly manifests: ManifestService,
-    private readonly instance: InstanceStorage,
-  ) { super(); }
+    private readonly instancePath: string,
+  ) {
+    super();
+    this.state = { buildId, stage: 'idle', message: 'idle' };
+  }
 
   get currentState(): UpdateState { return this.state; }
 
   private setState(s: Partial<UpdateState>): void {
-    this.state = { ...this.state, ...s };
+    this.state = { ...this.state, ...s, buildId: this.buildId };
     this.emit('state', this.state);
   }
 
@@ -84,9 +87,8 @@ export class Updater extends EventEmitter {
 
   async runUpdate(config: LauncherConfig): Promise<void> {
     try {
-      await this.instance.ensure();
-      await fs.mkdir(this.paths.cache, { recursive: true });
-      await fs.mkdir(this.paths.uiCache, { recursive: true });
+      await fs.mkdir(this.paths.cache(this.buildId), { recursive: true });
+      await fs.mkdir(this.paths.uiCache(this.buildId), { recursive: true });
 
       this.setState({ stage: 'check', message: 'Загружаю манифест сборки...' });
       const { manifest: build, offline } = await this.manifests.fetchBuildManifest(
@@ -122,7 +124,7 @@ export class Updater extends EventEmitter {
       );
       if (orphans.length > 0) {
         logger.info('updater', `Removing ${orphans.length} orphaned managed files`);
-        await removeManaged(this.instance.path, orphans);
+        await removeManaged(this.instancePath, orphans);
       }
 
       await this.syncUi(ui, lock?.managedFiles.ui ?? [], config);
@@ -139,7 +141,7 @@ export class Updater extends EventEmitter {
   /** Download archive (with retry), extract to staging, hash-verify, then promote. */
   private async downloadAndExtractArchive(build: BuildManifest, config: LauncherConfig): Promise<void> {
     const archiveName = path.basename(new URL(build.archiveUrl).pathname) || 'modpack.zip';
-    const archivePath = path.join(this.paths.cache, archiveName);
+    const archivePath = path.join(this.paths.cache(this.buildId), archiveName);
     const downloader = new Downloader(config.downloadConcurrency);
 
     // Try cached archive first.
@@ -178,7 +180,8 @@ export class Updater extends EventEmitter {
     const staging = path.join(os.tmpdir(), `eclipsefantasy-stage-${Date.now()}`);
     try {
       this.setState({ stage: 'extract', message: 'Распаковка архива...' });
-      await this.instance.wipeStaging(staging);
+      await fs.rm(staging, { recursive: true, force: true });
+      await fs.mkdir(staging, { recursive: true });
       await extractArchive(archivePath, staging);
 
       this.setState({ stage: 'verify', message: 'Проверка целостности файлов сборки...' });
@@ -193,7 +196,7 @@ export class Updater extends EventEmitter {
       this.setState({ stage: 'verify', message: 'Применяю файлы сборки...' });
       for (const entry of build.files) {
         const src = path.join(staging, entry.path);
-        const dst = path.join(this.instance.path, entry.path);
+        const dst = path.join(this.instancePath, entry.path);
         await fs.mkdir(path.dirname(dst), { recursive: true });
         await fs.copyFile(src, dst);
       }
@@ -205,7 +208,7 @@ export class Updater extends EventEmitter {
   /** Re-hash currently-installed instance files; if any drift, re-extract. */
   private async verifyInstance(build: BuildManifest): Promise<void> {
     this.setState({ stage: 'verify', message: 'Проверка существующих файлов...' });
-    const diff = await diffAgainstManifest(this.instance.path, build.files, []);
+    const diff = await diffAgainstManifest(this.instancePath, build.files, []);
     if (diff.toDownload.length === 0) {
       logger.info('updater', 'Instance verified, no changes needed');
       return;
@@ -231,14 +234,14 @@ export class Updater extends EventEmitter {
 
   private async syncUi(ui: UiManifest, previouslyManagedUi: string[], config: LauncherConfig): Promise<void> {
     this.setState({ stage: 'download-ui', message: 'Синхронизация UI-ассетов...' });
-    const diff = await diffAgainstManifest(this.paths.uiCache, ui.files, previouslyManagedUi);
-    if (diff.toRemove.length > 0) await removeManaged(this.paths.uiCache, diff.toRemove);
+    const diff = await diffAgainstManifest(this.paths.uiCache(this.buildId), ui.files, previouslyManagedUi);
+    if (diff.toRemove.length > 0) await removeManaged(this.paths.uiCache(this.buildId), diff.toRemove);
     if (diff.toDownload.length === 0) return;
 
     const items = diff.toDownload.map((f) => ({
       id: f.path,
       url: f.url ?? '',
-      dest: path.join(this.paths.uiCache, f.path),
+      dest: path.join(this.paths.uiCache(this.buildId), f.path),
       sha256: f.sha256,
       size: f.size,
     }));
