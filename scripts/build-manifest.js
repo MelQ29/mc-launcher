@@ -73,10 +73,16 @@ async function main() {
   console.log('Hashing archive...');
   const archiveSha = await sha256(args.archive);
   const archiveStat = fs.statSync(args.archive);
+  const modloader = args.modloader || 'fabric';
+  const loaderVersion = args['loader-version'] || args.fabric;
   const manifest = {
     version: args.version,
     minecraft: args.minecraft,
-    fabricLoader: args.fabric,
+    modloader,
+    loaderVersion,
+    // Keep `fabricLoader` populated for backwards compat with older launcher
+    // builds that read only this field. Skipped for non-fabric modloaders.
+    ...(modloader === 'fabric' ? { fabricLoader: loaderVersion } : {}),
     archiveUrl: args['archive-url'],
     archiveSha256: archiveSha,
     archiveSize: archiveStat.size,

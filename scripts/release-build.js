@@ -14,6 +14,8 @@
  *     --archive-url http://141.98.189.63/EclipseFantasy-v1.0.5.zip \
  *     [--recommended-ram 6144]
  *     [--upload-archive]
+ *     [--modloader fabric|neoforge]            (default: fabric; reads --fabric as loader version)
+ *     [--loader-version 21.1.226]              (preferred over --fabric; e.g. NeoForge version)
  *     [--branding-video background.mp4]       (default: auto-detect from assets/<id>-ui/)
  *     [--branding-play play_button.png]
  *     [--branding-options options_button.png]
@@ -61,6 +63,8 @@ function detectVideo() {
   return f || 'background.mkv';
 }
 
+const modloader = args.modloader || 'fabric';
+const loaderVersion = args['loader-version'] || args.fabric;
 const subArgs = [
   'scripts/build-manifest.js',
   '--build-id', buildId,
@@ -68,7 +72,9 @@ const subArgs = [
   '--archive', args.archive,
   '--version', args.version,
   '--minecraft', args.minecraft,
-  '--fabric', args.fabric,
+  '--fabric', loaderVersion,
+  '--modloader', modloader,
+  '--loader-version', loaderVersion,
   '--archive-url', args['archive-url'],
   '--out', outLocal,
   '--branding-video', detectVideo(),

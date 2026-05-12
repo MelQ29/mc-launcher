@@ -12,6 +12,8 @@ export interface ManagedFileEntry {
   url?: string;
 }
 
+export type Modloader = 'fabric' | 'neoforge';
+
 export interface BuildManifest {
   /** ID of the build from builds.json (matches BuildEntry.id). */
   buildId?: string;
@@ -19,8 +21,12 @@ export interface BuildManifest {
   version: string;
   /** Minecraft release this build targets, e.g. "1.20.1". */
   minecraft: string;
-  /** Fabric loader version, e.g. "0.16.14". */
-  fabricLoader: string;
+  /** Modloader kind. Default 'fabric' when absent (legacy). */
+  modloader?: Modloader;
+  /** Loader version (Fabric: "0.16.14"; NeoForge: "21.1.226"). */
+  loaderVersion?: string;
+  /** @deprecated Legacy; same as loaderVersion when modloader='fabric'. */
+  fabricLoader?: string;
   /** Direct URL to the modpack archive (zip or 7z). */
   archiveUrl: string;
   /** SHA-256 of the archive itself. */

@@ -73,11 +73,16 @@ export function registerIpc(deps: IpcDeps): void {
   ipcMain.handle('launcher:play', async (_e, id?: BuildId) => {
     const inst = deps.registry.get(activeOr(id));
     const manifest = await inst.getBuildManifest();
+    // Legacy manifests only have `fabricLoader`; new manifests have
+    // explicit `modloader` + `loaderVersion`. Default to fabric.
+    const modloader = manifest.modloader ?? 'fabric';
+    const loaderVersion = manifest.loaderVersion ?? manifest.fabricLoader ?? '';
     return inst.launcher.launch(
       inst.perBuildConfig(),
       inst.instanceRoot(),
-      manifest.minecraft, manifest.fabricLoader,
+      manifest.minecraft, loaderVersion,
       inst.entry.displayName,
+      modloader,
     );
   });
 
