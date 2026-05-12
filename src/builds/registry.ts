@@ -57,9 +57,22 @@ export class BuildRegistry extends EventEmitter {
     }
     this.emit('builds-changed', registry);
 
-    // 5. background pre-warm UI assets for each build so ef-asset:// resolves
-    //    to real per-build files (video, buttons) on first launch — without
-    //    requiring the user to click PLAY first.
+    // 5. Synchronously fetch each build_manifest so state.branding is
+    //    populated before the renderer's first listBuilds() call. Without
+    //    this, the renderer would race with the network fetch and fall
+    //    back to a hard-coded 'background.mkv' filename — broken for any
+    //    build whose manifest specifies a different name (e.g. .mp4).
+    //    These manifests are small JSON (~500 KB) and fetch in parallel.
+    await Promise.all(registry.builds.map(async (entry) => {
+      const inst = this.instances.get(entry.id);
+      if (!inst) return;
+      await inst.getBuildManifest().catch((err) =>
+        logger.warn('build-registry', `pre-fetch build_manifest failed for ${entry.id}: ${(err as Error).message}`),
+      );
+    }));
+
+    // 6. Background pre-warm UI assets (video, buttons) — the heavy part
+    //    that can run async while the user looks at the launcher.
     for (const entry of registry.builds) {
       const inst = this.instances.get(entry.id);
       if (!inst) continue;
