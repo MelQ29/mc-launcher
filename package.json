@@ -10,6 +10,9 @@
   },
   "license": "MIT",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "clean": "rimraf dist",
     "build:main": "tsc -p tsconfig.main.json",
