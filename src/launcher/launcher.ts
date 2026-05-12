@@ -4,7 +4,7 @@ import { spawn } from 'child_process';
 import { logger } from '../core/logger';
 import { Paths } from '../core/paths';
 import { fetchText } from '../downloader/downloader';
-import type { LauncherConfig } from '../core/types';
+import type { PerBuildConfig } from '../core/types';
 
 /**
  * Hands off launch to the official Minecraft Launcher by registering a
@@ -25,11 +25,19 @@ import type { LauncherConfig } from '../core/types';
  * download Minecraft assets — those remain the official launcher's job).
  */
 export class GameLauncher {
-  private readonly profileId = 'eclipsefantasy';
+  private readonly profileId: string;
 
-  constructor(private readonly paths: Paths) {}
+  constructor(buildId: string, private readonly paths: Paths) {
+    this.profileId = `eclipsefantasy-${buildId}`;
+  }
 
-  async launch(config: LauncherConfig, instancePath: string, minecraft: string, fabricLoader: string): Promise<{ ok: boolean; profileId: string }> {
+  async launch(
+    perBuildCfg: PerBuildConfig,
+    instancePath: string,
+    minecraft: string,
+    fabricLoader: string,
+    buildDisplayName: string,
+  ): Promise<{ ok: boolean; profileId: string }> {
     const dotMc = Paths.defaultDotMinecraft();
     // The official launcher needs three things to start the modpack:
     //   1. our profile in launcher_profiles.json (gameDir, lastVersionId, args)
@@ -40,7 +48,7 @@ export class GameLauncher {
     // Without (2) the launcher fails with REQUEST_FAILED / Unable to prepare
     // assets — that's exactly the bug that hit testers on a fresh PC.
     await this.ensureFabricVersion(dotMc, minecraft, fabricLoader);
-    await this.writeProfile(dotMc, instancePath, config, minecraft, fabricLoader);
+    await this.writeProfile(dotMc, instancePath, perBuildCfg, minecraft, fabricLoader, buildDisplayName);
 
     // Try, in order: a known .exe path → minecraft:// URI handler → UWP shell
     // appsFolder route. The first one that doesn't throw wins. Each method
@@ -118,9 +126,10 @@ export class GameLauncher {
   private async writeProfile(
     dotMc: string,
     instancePath: string,
-    config: LauncherConfig,
+    perBuildCfg: PerBuildConfig,
     minecraft: string,
     fabricLoader: string,
+    buildDisplayName: string,
   ): Promise<void> {
     await fs.mkdir(dotMc, { recursive: true });
     const profilesPath = path.join(dotMc, 'launcher_profiles.json');
@@ -134,11 +143,11 @@ export class GameLauncher {
     }
     if (typeof data.profiles !== 'object' || data.profiles === null) data.profiles = {};
     const lastVersionId = `fabric-loader-${fabricLoader}-${minecraft}`;
-    const javaArgs = `-Xmx${config.ramMb}M -Xms${Math.max(512, Math.floor(config.ramMb / 4))}M`;
+    const javaArgs = `-Xmx${perBuildCfg.ramMb}M -Xms${Math.max(512, Math.floor(perBuildCfg.ramMb / 4))}M`;
     const profiles = data.profiles as Record<string, Record<string, unknown>>;
     profiles[this.profileId] = {
       ...profiles[this.profileId],
-      name: config.name,
+      name: buildDisplayName,
       type: 'custom',
       created: profiles[this.profileId]?.created ?? new Date().toISOString(),
       lastUsed: new Date().toISOString(),
