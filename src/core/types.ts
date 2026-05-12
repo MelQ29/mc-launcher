@@ -25,6 +25,13 @@ export interface BuildManifest {
   modloader?: Modloader;
   /** Loader version (Fabric: "0.16.14"; NeoForge: "21.1.226"). */
   loaderVersion?: string;
+  /**
+   * Override URL for the loader's installer JAR. When absent, the launcher
+   * computes the default (Fabric Meta for fabric, maven.neoforged.net for
+   * neoforge). Useful when the upstream is flaky and you want to mirror the
+   * installer on the modpack-hosting VPS.
+   */
+  loaderInstallerUrl?: string;
   /** @deprecated Legacy; same as loaderVersion when modloader='fabric'. */
   fabricLoader?: string;
   /** Direct URL to the modpack archive (zip or 7z). */
@@ -190,6 +197,12 @@ export interface BuildState {
   installedVersion: string | null;
   updateNeeded: boolean | null;   // null = не проверяли
   branding: BrandingManifest | null;
+  /** Minecraft release this build targets (from build_manifest). */
+  minecraft?: string;
+  /** Modloader kind (from build_manifest), default 'fabric' if absent. */
+  modloader?: Modloader;
+  /** Loader version (from build_manifest). */
+  loaderVersion?: string;
   lastError?: string;
 }
 

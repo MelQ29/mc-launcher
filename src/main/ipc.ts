@@ -88,6 +88,7 @@ export function registerIpc(deps: IpcDeps): void {
         // stream so the renderer's progress block surfaces what's happening
         // (NeoForge installer, profile write, Mojang Launcher spawn).
         (msg) => inst.updater.publishLaunchingState(msg),
+        manifest.loaderInstallerUrl,
       );
       // Reset back to idle so the progress block hides on success.
       inst.updater.publishIdleState();

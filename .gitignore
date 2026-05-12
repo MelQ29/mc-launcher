@@ -14,6 +14,7 @@ launcher.config.local.json
 # Modpack build artefacts — too large for git
 *.zip
 *.7z
+*.jar
 build-staging/
 build_manifest.json
 ui_manifest.json

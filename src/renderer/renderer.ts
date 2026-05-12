@@ -148,9 +148,12 @@ async function renderActive(): Promise<void> {
 
   // Version chip
   els.versionChipValue.textContent = bs.installedVersion ?? '—';
+  const loaderLabel = bs.modloader === 'neoforge' ? 'NeoForge' : 'Fabric';
+  const mcLabel = bs.minecraft ?? '—';
+  const loaderVer = bs.loaderVersion ? ` ${bs.loaderVersion}` : '';
   els.versionInfo.innerHTML = bs.installedVersion
-    ? `v${escapeHtml(bs.installedVersion)} · Minecraft / Fabric`
-    : 'не установлено';
+    ? `v${escapeHtml(bs.installedVersion)} · MC ${escapeHtml(mcLabel)} / ${loaderLabel}${escapeHtml(loaderVer)}`
+    : `MC ${escapeHtml(mcLabel)} / ${loaderLabel}${escapeHtml(loaderVer)} · не установлено`;
 
   // News
   const news = state.newsByBuild.get(entry.id) ?? [];

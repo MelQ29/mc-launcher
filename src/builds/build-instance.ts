@@ -81,14 +81,11 @@ export class BuildInstance extends EventEmitter {
 
   async state(): Promise<BuildState> {
     const installed = await this.installedVersion();
-    let branding: BrandingManifest | null = null;
-    if (this.cachedBuildManifest?.branding) branding = this.cachedBuildManifest.branding;
-    else {
-      // Try to read from disk cache
+    let manifest: BuildManifest | null = this.cachedBuildManifest;
+    if (!manifest) {
       try {
         const raw = await fs.readFile(this.deps.paths.buildManifestCache(this.id), 'utf8');
-        const cached = JSON.parse(raw) as BuildManifest;
-        if (cached.branding) branding = cached.branding;
+        manifest = JSON.parse(raw) as BuildManifest;
       } catch { /* no cache yet */ }
     }
     return {
@@ -99,7 +96,10 @@ export class BuildInstance extends EventEmitter {
       installed: installed !== null,
       installedVersion: installed,
       updateNeeded: null,        // populated by explicit check
-      branding,
+      branding: manifest?.branding ?? null,
+      minecraft: manifest?.minecraft,
+      modloader: manifest?.modloader ?? (manifest?.fabricLoader ? 'fabric' : undefined),
+      loaderVersion: manifest?.loaderVersion ?? manifest?.fabricLoader,
     };
   }
 

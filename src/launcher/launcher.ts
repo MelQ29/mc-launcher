@@ -41,11 +41,12 @@ export class GameLauncher {
     buildDisplayName: string,
     modloader: Modloader = 'fabric',
     onStatus: (message: string) => void = () => {},
+    loaderInstallerUrlOverride?: string,
   ): Promise<{ ok: boolean; profileId: string }> {
     const dotMc = Paths.defaultDotMinecraft();
     const lastVersionId = this.lastVersionIdFor(modloader, minecraft, loaderVersion);
 
-    await this.ensureLoaderVersion(dotMc, minecraft, modloader, loaderVersion, onStatus);
+    await this.ensureLoaderVersion(dotMc, minecraft, modloader, loaderVersion, onStatus, loaderInstallerUrlOverride);
     onStatus('Готовлю профиль Minecraft Launcher…');
     await this.writeProfile(dotMc, instancePath, perBuildCfg, lastVersionId, buildDisplayName);
     onStatus('Открываю Minecraft Launcher…');
@@ -97,9 +98,10 @@ export class GameLauncher {
     modloader: Modloader,
     loaderVersion: string,
     onStatus: (message: string) => void,
+    installerUrlOverride?: string,
   ): Promise<void> {
     if (modloader === 'neoforge') {
-      await this.ensureNeoForgeVersion(dotMc, minecraft, loaderVersion, onStatus);
+      await this.ensureNeoForgeVersion(dotMc, minecraft, loaderVersion, onStatus, installerUrlOverride);
       return;
     }
     onStatus(`Готовлю Fabric ${loaderVersion}…`);
@@ -144,6 +146,7 @@ export class GameLauncher {
     minecraft: string,
     loaderVersion: string,
     onStatus: (message: string) => void,
+    installerUrlOverride?: string,
   ): Promise<void> {
     const id = `neoforge-${loaderVersion}`;
     const versionJson = path.join(dotMc, 'versions', id, `${id}.json`);
@@ -153,21 +156,26 @@ export class GameLauncher {
       return;
     } catch { /* not installed yet */ }
 
-    const installerUrl = this.neoForgeInstallerUrl(minecraft, loaderVersion);
+    // Prefer the per-build override (typically pointing at our own VPS
+    // mirror — maven.neoforged.net is known-flaky on some ISPs:
+    // https://github.com/neoforged/NeoForge/issues/1813).
+    const installerUrl = installerUrlOverride ?? this.neoForgeInstallerUrl(minecraft, loaderVersion);
     const cacheDir = this.paths.cache(this.buildId);
     await fs.mkdir(cacheDir, { recursive: true });
     const installerPath = path.join(cacheDir, `neoforge-${loaderVersion}-installer.jar`);
 
-    // Download installer if not cached.
+    // Download installer if not cached. Use Electron's net.fetch (Chromium
+    // network stack) instead of our Node-https-based Downloader: maven.neoforged.net
+    // is well-known for ECONNRESET/TLS issues on some networks
+    // (https://github.com/neoforged/NeoForge/issues/1813) and Chromium's net
+    // stack handles keep-alive + TLS retries more reliably than Node.
     try {
       await fs.access(installerPath);
       logger.info('launcher', `Reusing cached NeoForge installer: ${installerPath}`);
     } catch {
       onStatus(`Скачиваю NeoForge ${loaderVersion} installer…`);
       logger.info('launcher', `Downloading NeoForge installer ${loaderVersion} from ${installerUrl}`);
-      const { Downloader } = await import('../downloader/downloader');
-      const dl = new Downloader(1);
-      await dl.downloadOne({ url: installerUrl, dest: installerPath, retries: 3 });
+      await fetchInstallerWithRetry(installerUrl, installerPath, onStatus);
     }
 
     onStatus('Ищу Java…');
@@ -275,6 +283,51 @@ export class GameLauncher {
     }
     return null;
   }
+}
+
+/**
+ * Download the NeoForge installer JAR using Electron's net.fetch (Chromium
+ * net stack). Retries up to 8 times with exponential backoff + jitter.
+ * Throws a user-readable error suggesting a VPN if all attempts fail —
+ * maven.neoforged.net is known to be flaky for some ISPs.
+ */
+async function fetchInstallerWithRetry(
+  url: string,
+  dest: string,
+  onStatus: (msg: string) => void,
+): Promise<void> {
+  // Lazy-load to keep this file usable in non-electron contexts.
+  const { net } = await import('electron');
+  const maxAttempts = 8;
+  let lastErr: Error | null = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await net.fetch(url, { redirect: 'follow' });
+      if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+      // Installer is ~7 MB; buffer in memory is fine and avoids stream-to-file plumbing.
+      const buf = Buffer.from(await res.arrayBuffer());
+      await fs.writeFile(dest, buf);
+      logger.info('launcher', `NeoForge installer downloaded (${buf.length} bytes, attempt ${attempt})`);
+      return;
+    } catch (err) {
+      lastErr = err instanceof Error ? err : new Error(String(err));
+      if (attempt >= maxAttempts) break;
+      // Exp backoff with jitter: 500ms, 1s, 2s, 4s, 8s, 16s, 30s capped, ±20% jitter.
+      const base = Math.min(30000, 500 * Math.pow(2, attempt - 1));
+      const delay = base * (0.8 + Math.random() * 0.4);
+      logger.warn(
+        'launcher',
+        `NeoForge installer download attempt ${attempt} failed (${lastErr.message}); retrying in ${Math.round(delay)}ms`,
+      );
+      onStatus(`Скачиваю NeoForge installer (попытка ${attempt + 1}/${maxAttempts})…`);
+      await new Promise<void>((r) => setTimeout(r, delay));
+    }
+  }
+  throw new Error(
+    `Не удалось скачать NeoForge installer после ${maxAttempts} попыток (${lastErr?.message ?? 'unknown'}). ` +
+    'Сервер maven.neoforged.net известен проблемами с некоторыми провайдерами — ' +
+    'попробуй VPN (ProtonVPN/Cloudflare WARP) и перезапусти лаунчер.',
+  );
 }
 
 /**

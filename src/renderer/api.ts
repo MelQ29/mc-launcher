@@ -73,6 +73,8 @@ export interface BrandingManifest {
   replaceButton: string;
 }
 
+export type Modloader = 'fabric' | 'neoforge';
+
 export interface BuildState {
   id: BuildId;
   displayName: string;
@@ -82,6 +84,9 @@ export interface BuildState {
   installedVersion: string | null;
   updateNeeded: boolean | null;
   branding: BrandingManifest | null;
+  minecraft?: string;
+  modloader?: Modloader;
+  loaderVersion?: string;
   lastError?: string;
 }
 
