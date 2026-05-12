@@ -157,8 +157,22 @@ export class Updater extends EventEmitter {
       if (archiveNeeded) {
         await this.downloadAndExtractArchive(build, config);
       } else {
-        // Same archive but verify files in case the user tampered with the instance.
-        await this.verifyInstance(build);
+        // Same archive recorded in the lock, but verify files are still on
+        // disk at the current instancePath. If they're missing (e.g. user
+        // changed installPath since last install, or wiped the folder),
+        // verifyInstance throws RetryWithArchive — catch it and re-extract
+        // from the cached archive (downloadAndExtractArchive reuses the
+        // local copy when its sha matches, no re-download).
+        try {
+          await this.verifyInstance(build);
+        } catch (err) {
+          if (err instanceof RetryWithArchive) {
+            logger.info('updater', 'Instance files drifted/missing — re-extracting archive');
+            await this.downloadAndExtractArchive(build, config);
+          } else {
+            throw err;
+          }
+        }
       }
 
       // Remove files that were in the previous manifest but not the new one.
