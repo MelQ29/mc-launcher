@@ -4,12 +4,10 @@ import { promises as fs } from 'fs';
 import { logger } from '../core/logger';
 import { Paths } from '../core/paths';
 import { ConfigStore } from '../core/config';
-import { ManifestService } from '../manifest/manifest';
-import { InstanceStorage } from '../storage/instance';
-import { Updater } from '../update/updater';
 import { selfUpdater } from '../update/self-updater';
-import { GameLauncher } from '../launcher/launcher';
 import { registerIpc } from './ipc';
+import { BuildRegistry } from '../builds/registry';
+import { BuildInstance } from '../builds/build-instance';
 
 /**
  * Electron main process entry. Wires up:
@@ -23,8 +21,6 @@ let mainWindow: BrowserWindow | null = null;
 
 async function bootstrap(): Promise<void> {
   const userData = app.getPath('userData');
-  // In packaged builds, extraResources lands under process.resourcesPath; in
-  // dev we read straight from the project tree (dist/main/main -> ../../..).
   const resourcesDir = app.isPackaged
     ? process.resourcesPath
     : path.resolve(__dirname, '..', '..', '..');
@@ -35,34 +31,34 @@ async function bootstrap(): Promise<void> {
 
   const config = new ConfigStore(paths.settingsFile, paths.bundledConfig);
   await config.load();
-  const instance = new InstanceStorage(paths.instanceRoot(config.current.installPath));
-  await paths.ensureDirs(instance.path);
 
-  const manifests = new ManifestService(paths.buildManifestCache, paths.uiManifestCache, paths.manifestLockFile);
-  const updater = new Updater(paths, manifests, instance);
-  const launcher = new GameLauncher(paths);
+  const registry = new BuildRegistry({
+    paths, config,
+    createInstance: (entry) => new BuildInstance({ paths, config, entry }),
+  });
+  await registry.load();
 
   selfUpdater.init();
-  registerIpc({ paths, config, manifests, updater, launcher, instance, selfUpdater, getWindow: () => mainWindow });
+  registerIpc({ paths, config, registry, selfUpdater, getWindow: () => mainWindow });
 
-  // Kick off a self-update check shortly after the window is ready so it
-  // doesn't compete with the modpack manifest fetch on startup. Errors are
-  // swallowed; nothing should block the user from launching the modpack
-  // because the launcher itself can't reach the update server.
   setTimeout(() => { void selfUpdater.check(); }, 4000);
 
-  // Custom protocol so the renderer can address bundled and downloaded UI
-  // assets uniformly via "ef-asset://logo.png" — the main process routes the
-  // request to the on-disk file (UI cache first, then bundled fallback).
   protocol.registerFileProtocol('ef-asset', async (request, callback) => {
+    // URL is ef-asset://<buildId>/<name>
     const url = decodeURIComponent(request.url.replace(/^ef-asset:\/\//, ''));
-    const safeRel = url.replace(/^[\\/]+/, '').replace(/\?.*$/, '');
-    const fromCache = path.join(paths.uiCache, safeRel);
-    const fromBundle = path.join(paths.bundledAssets, `Iss_${safeRel}`);
-    try { await fs.access(fromCache); callback({ path: fromCache }); return; } catch { /* try fallback */ }
-    try { await fs.access(fromBundle); callback({ path: fromBundle }); return; } catch { /* try fallback */ }
-    const generic = path.join(paths.bundledAssets, safeRel);
-    callback({ path: generic });
+    const m = url.match(/^([a-z0-9-]+)\/(.+)$/i);
+    if (!m) { callback({ path: path.join(paths.bundledAssets, url) }); return; }
+    const [, bid, rel] = m;
+    const safeRel = rel.replace(/^[\\/]+/, '').replace(/\?.*$/, '');
+    const candidates = [
+      path.join(paths.uiCache(bid), safeRel),
+      path.join(paths.bundledAssets, `Iss_${safeRel}`),
+      path.join(paths.bundledAssets, safeRel),
+    ];
+    for (const c of candidates) {
+      try { await fs.access(c); callback({ path: c }); return; } catch { /* next */ }
+    }
+    callback({ path: candidates[candidates.length - 1] });
   });
 
   await app.whenReady();
