@@ -4,6 +4,57 @@
 в коде лаунчера до выкладки новой версии модпака. Цель — чтобы любой человек с
 доступом мог опубликовать обновление без вопросов.
 
+## Релиз новой версии сборки
+
+```bash
+# 1. Распаковать архив локально
+mkdir -p tmp/<id>-source && unzip -q -o /path/to/<id>-v<X.Y.Z>.zip -d tmp/<id>-source
+
+# 2. Залить архив на VPS (если ещё не там)
+scp /path/to/<id>-v<X.Y.Z>.zip darkfantasy_vps:/var/www/eclipsefantasy/
+
+# 3. Сгенерировать и залить build_manifest
+node scripts/release-build.js \
+  --build-id <id> \
+  --instance tmp/<id>-source \
+  --archive /path/to/<id>-v<X.Y.Z>.zip \
+  --version <X.Y.Z> --minecraft <MC> --fabric <FAB> \
+  --archive-url http://141.98.189.63/<id>-v<X.Y.Z>.zip \
+  --recommended-ram <MB>
+```
+
+## Публикация новостей
+
+```bash
+# Добавить запись интерактивно
+node scripts/release-news.js add --build-id <id>
+
+# Опубликовать draft.json целиком (заменяет всю ленту)
+node scripts/release-news.js publish --build-id <id> --from ./draft.json
+
+# Удалить запись по id
+node scripts/release-news.js remove --build-id <id> --id <entry-id>
+```
+
+## Управление реестром сборок
+
+```bash
+node scripts/update-registry.js add --id <id> --display-name "..." --short-name <SHORT> --accent "#rrggbb" --order N
+node scripts/update-registry.js disable    --id <id>
+node scripts/update-registry.js enable     --id <id>
+node scripts/update-registry.js set-default --id <id>
+```
+
+## Релиз UI-ассетов сборки
+
+```bash
+# assets/<id>-ui/ — локальная папка с background.{mkv,mp4}, play_button.png,
+# options_button.png, replace_button.png
+node scripts/release-ui.js --build-id <id>
+```
+
+---
+
 ## Содержание
 
 - [Где что лежит и кто куда стучится](#где-что-лежит-и-кто-куда-стучится)
