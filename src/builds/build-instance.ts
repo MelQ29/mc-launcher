@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { promises as fs } from 'fs';
+import * as path from 'path';
 import type {
   BuildEntry, BuildId, BuildState, PerBuildConfig,
   UpdateState, BrandingManifest, BuildManifest, NewsEntry,
@@ -76,7 +77,20 @@ export class BuildInstance extends EventEmitter {
 
   async installedVersion(): Promise<string | null> {
     const lock = await this.manifests.readLock();
-    return lock?.buildVersion ?? null;
+    if (!lock) return null;
+    // Sanity-check that the recorded install actually exists at the current
+    // instancePath. If the user changed installPath since last install (or
+    // wiped files manually), the lock is stale — report as not-installed
+    // so the launcher offers a fresh install instead of launching the
+    // configured Minecraft Launcher profile against an empty gameDir
+    // (which would silently fall back to vanilla, the worst outcome).
+    const instancePath = this.instanceRoot();
+    const sentinels = lock.managedFiles.instance.slice(0, 5);
+    for (const rel of sentinels) {
+      try { await fs.access(path.join(instancePath, rel)); }
+      catch { return null; }
+    }
+    return lock.buildVersion;
   }
 
   async state(): Promise<BuildState> {

@@ -187,6 +187,15 @@ export class SettingsModal {
     };
     await this.api.saveConfig(patch);
     this.toast('Сохранено ✓');
+
+    // installPath might have changed — force a registry refresh so the
+    // main process re-validates installedVersion (sentinel file check)
+    // and the renderer's PLAY label switches to "Скачать и запустить"
+    // if the new folder is empty.
+    if (existingPath !== newPath) {
+      await this.api.refreshBuilds().catch(() => { /* ignore */ });
+      await this.refreshInstallInfo(id);
+    }
   }
 
   private toast(msg: string): void {
