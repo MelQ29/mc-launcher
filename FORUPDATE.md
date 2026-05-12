@@ -6,6 +6,8 @@
 
 ## Релиз новой версии сборки
 
+### Fabric-сборка (как Eclipse Fantasy)
+
 ```bash
 # 1. Распаковать архив локально
 mkdir -p tmp/<id>-source && unzip -q -o /path/to/<id>-v<X.Y.Z>.zip -d tmp/<id>-source
@@ -19,9 +21,49 @@ node scripts/release-build.js \
   --instance tmp/<id>-source \
   --archive /path/to/<id>-v<X.Y.Z>.zip \
   --version <X.Y.Z> --minecraft <MC> --fabric <FAB> \
+  --modloader fabric \
+  --loader-version <FAB> \
   --archive-url http://141.98.189.63/<id>-v<X.Y.Z>.zip \
   --recommended-ram <MB>
 ```
+
+### NeoForge-сборка (как FTB Summermon)
+
+```bash
+# 1-2. Те же что для Fabric
+
+# 3. Сгенерировать build_manifest с указанием modloader
+node scripts/release-build.js \
+  --build-id <id> \
+  --instance tmp/<id>-source \
+  --archive /path/to/<id>-v<X.Y.Z>.zip \
+  --version <X.Y.Z> --minecraft 1.21.1 --fabric 21.1.226 \
+  --modloader neoforge \
+  --loader-version 21.1.226 \
+  --archive-url http://141.98.189.63/<id>-v<X.Y.Z>.zip \
+  --recommended-ram <MB>
+
+# 4. Залить NeoForge installer JAR на наш VPS (один раз на версию loader-а)
+#    Скачать вручную: https://maven.neoforged.net/releases/net/neoforged/neoforge/<VER>/neoforge-<VER>-installer.jar
+ssh darkfantasy_vps "mkdir -p /var/www/eclipsefantasy/loaders"
+scp neoforge-<VER>-installer.jar darkfantasy_vps:/var/www/eclipsefantasy/loaders/
+
+# 5. Пропатчить manifest, добавив loaderInstallerUrl, чтобы лаунчер качал
+#    с нашего VPS, а не с maven.neoforged.net (часть провайдеров его блокирует)
+ssh darkfantasy_vps "python3 -c \"
+import json
+m = json.load(open('/var/www/eclipsefantasy/<id>/build_manifest.json'))
+m['loaderInstallerUrl'] = 'http://141.98.189.63/loaders/neoforge-<VER>-installer.jar'
+json.dump(m, open('/var/www/eclipsefantasy/<id>/build_manifest.json','w'), indent=2)
+\""
+```
+
+**Важно про NeoForge installer**: он на стороне пользователя САМ качает 60+ библиотек
+с `maven.neoforged.net`. Наш VPS mirror — только installer JAR (~7 MB), не либы.
+Пользователи с заблокированным maven.neoforged.net увидят VPN-хинт в лаунчере при
+ошибке install — у нас в коде есть детектор `SocketTimeoutException`. После одного
+успешного запуска NeoForge кешируется в `~/.minecraft/libraries/` и VPN больше
+не нужен.
 
 ## Публикация новостей
 
