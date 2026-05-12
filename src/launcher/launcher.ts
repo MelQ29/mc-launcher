@@ -187,6 +187,8 @@ export class GameLauncher {
     }
     onStatus(`Устанавливаю NeoForge ${loaderVersion} (1–5 мин, качает либы и патчит Minecraft)…`);
     logger.info('launcher', `Running NeoForge installer with ${java} ...`);
+    let installerStdout = '';
+    let installerStderr = '';
     await new Promise<void>((resolve, reject) => {
       // -Djava.awt.headless=true suppresses the installer's GUI window so
       // the user doesn't see a stray "OK" dialog mid-launch; combined with
@@ -196,15 +198,38 @@ export class GameLauncher {
         ['-Djava.awt.headless=true', '-jar', installerPath, '--install-client', dotMc],
         { stdio: 'pipe' },
       );
-      let stderr = '';
-      child.stderr?.on('data', (b) => { stderr += String(b); });
-      child.stdout?.on('data', (b) => logger.debug('launcher', `neoforge: ${String(b).trim()}`));
+      child.stderr?.on('data', (b) => { installerStderr += String(b); });
+      child.stdout?.on('data', (b) => {
+        const s = String(b);
+        installerStdout += s;
+        for (const line of s.split(/\r?\n/)) {
+          if (line.trim()) logger.debug('launcher', `neoforge: ${line.trim()}`);
+        }
+      });
       child.on('error', reject);
       child.on('exit', (code) => {
         if (code === 0) resolve();
-        else reject(new Error(`NeoForge installer exited ${code}: ${stderr.slice(-500)}`));
+        else reject(new Error(`NeoForge installer exited ${code}: ${installerStderr.slice(-500)}`));
       });
     });
+
+    // Post-install verify: the installer prints "SocketTimeoutException" for
+    // each library it failed to fetch from maven.neoforged.net, then often
+    // continues and exits 0 anyway, leaving a broken install. Insist on the
+    // version JSON existing — if it doesn't, the install effectively failed.
+    try {
+      await fs.access(versionJson);
+    } catch {
+      const timeoutCount = (installerStdout.match(/SocketTimeoutException/g) ?? []).length;
+      const hint = timeoutCount > 0
+        ? `Установщик не смог скачать ${timeoutCount}+ библиотек с maven.neoforged.net. ` +
+          'Этот сервер бывает недоступен у некоторых провайдеров — попробуй VPN (ProtonVPN, Cloudflare WARP) ' +
+          'и перезапусти лаунчер. После одного успешного запуска NeoForge закешируется локально ' +
+          'и VPN больше не понадобится.'
+        : 'NeoForge installer завершился, но не создал versions/neoforge-' + loaderVersion + '/neoforge-' +
+          loaderVersion + '.json. Проверь лог выше.';
+      throw new Error(hint);
+    }
     logger.info('launcher', `NeoForge ${loaderVersion} installed`);
   }
 
