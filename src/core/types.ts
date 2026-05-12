@@ -195,6 +195,8 @@ export interface BuildState {
   accentColor: string;
   installed: boolean;
   installedVersion: string | null;
+  /** Latest version available remotely (from build_manifest.version). */
+  availableVersion?: string;
   updateNeeded: boolean | null;   // null = не проверяли
   branding: BrandingManifest | null;
   /** Minecraft release this build targets (from build_manifest). */

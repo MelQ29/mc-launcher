@@ -109,6 +109,7 @@ export class BuildInstance extends EventEmitter {
       accentColor: this.entry.accentColor,
       installed: installed !== null,
       installedVersion: installed,
+      availableVersion: manifest?.version,
       updateNeeded: null,        // populated by explicit check
       branding: manifest?.branding ?? null,
       minecraft: manifest?.minecraft,

@@ -82,6 +82,7 @@ export interface BuildState {
   accentColor: string;
   installed: boolean;
   installedVersion: string | null;
+  availableVersion?: string;
   updateNeeded: boolean | null;
   branding: BrandingManifest | null;
   minecraft?: string;

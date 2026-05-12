@@ -146,14 +146,19 @@ async function renderActive(): Promise<void> {
   applyAccent(entry.accentColor);
   await applyVideoAndButton(entry, bs, api.resolveAssetUrl.bind(api));
 
-  // Version chip
-  els.versionChipValue.textContent = bs.installedVersion ?? '—';
+  // Version chip shows the build's available version (from manifest), not
+  // the installed one — users want to see what version the build IS, even
+  // before they install. Install state is conveyed via the launch button
+  // text and the versionInfo line below.
+  const displayVersion = bs.availableVersion ?? bs.installedVersion ?? '—';
+  els.versionChipValue.textContent = displayVersion;
   const loaderLabel = bs.modloader === 'neoforge' ? 'NeoForge' : 'Fabric';
   const mcLabel = bs.minecraft ?? '—';
   const loaderVer = bs.loaderVersion ? ` ${bs.loaderVersion}` : '';
-  els.versionInfo.innerHTML = bs.installedVersion
-    ? `v${escapeHtml(bs.installedVersion)} · MC ${escapeHtml(mcLabel)} / ${loaderLabel}${escapeHtml(loaderVer)}`
-    : `MC ${escapeHtml(mcLabel)} / ${loaderLabel}${escapeHtml(loaderVer)} · не установлено`;
+  const statusSuffix = bs.installedVersion
+    ? bs.installedVersion === bs.availableVersion ? ' · установлено' : ` · установлено v${escapeHtml(bs.installedVersion)}`
+    : ' · не установлено';
+  els.versionInfo.innerHTML = `v${escapeHtml(displayVersion)} · MC ${escapeHtml(mcLabel)} / ${loaderLabel}${escapeHtml(loaderVer)}${statusSuffix}`;
 
   // News
   const news = state.newsByBuild.get(entry.id) ?? [];
