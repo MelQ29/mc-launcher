@@ -150,11 +150,27 @@ export class GameLauncher {
   ): Promise<void> {
     const id = `neoforge-${loaderVersion}`;
     const versionJson = path.join(dotMc, 'versions', id, `${id}.json`);
+    // Also verify the main NeoForge client JAR is present + non-empty.
+    // A partial install (e.g. earlier attempt under blocked network) leaves
+    // versions/neoforge-<ver>/neoforge-<ver>.json on disk but truncated or
+    // missing libraries in libraries/net/neoforged/. FML then loads, scans
+    // mods, but fails with "missing mod 'neoforge'/'minecraft' [MISSING]"
+    // because the core JAR didn't register itself. Re-run the installer.
+    const neoforgeJar = path.join(
+      dotMc, 'libraries', 'net', 'neoforged', 'neoforge', loaderVersion,
+      `neoforge-${loaderVersion}-client.jar`,
+    );
+    let prevInstallLooksOk = false;
     try {
       await fs.access(versionJson);
+      const jarStat = await fs.stat(neoforgeJar);
+      if (jarStat.size > 1024) prevInstallLooksOk = true;
+      else logger.warn('launcher', `NeoForge core JAR is suspiciously small (${jarStat.size} bytes) — reinstalling`);
+    } catch { /* either file missing — re-install */ }
+    if (prevInstallLooksOk) {
       logger.info('launcher', `NeoForge ${loaderVersion} already installed (${versionJson})`);
       return;
-    } catch { /* not installed yet */ }
+    }
 
     // Prefer the per-build override (typically pointing at our own VPS
     // mirror — maven.neoforged.net is known-flaky on some ISPs:
