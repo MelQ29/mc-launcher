@@ -87,6 +87,28 @@ export class Updater extends EventEmitter {
     };
   }
 
+  /**
+   * Download UI assets only (no archive, no instance changes). Used at startup
+   * to pre-warm `ef-asset://` lookups so video/buttons render before the user
+   * runs a full update.
+   */
+  async runUiSync(config: LauncherConfig): Promise<void> {
+    try {
+      await fs.mkdir(this.paths.uiCache(this.buildId), { recursive: true });
+      this.setState({ stage: 'download-ui', message: 'Загружаю UI-ассеты...' });
+      const { manifest: ui } = await this.manifests.fetchUiManifest(
+        this.uiManifestUrl, config.signaturePublicKey, config.requireValidSignature,
+      );
+      const lock = await this.manifests.readLock();
+      await this.syncUi(ui, lock?.managedFiles.ui ?? [], config);
+      this.setState({ stage: 'ready', message: 'UI готов' });
+    } catch (err) {
+      const msg = (err as Error).message;
+      logger.warn('updater', `UI-only sync failed: ${msg}`);
+      this.setState({ stage: 'idle', message: 'idle' });
+    }
+  }
+
   async runUpdate(config: LauncherConfig): Promise<void> {
     try {
       await fs.mkdir(this.paths.cache(this.buildId), { recursive: true });

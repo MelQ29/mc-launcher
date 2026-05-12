@@ -246,6 +246,9 @@ async function bootstrap(): Promise<void> {
     state.progressByBuild.set(s.buildId, s);
     if (state.activeBuildId === s.buildId) applyProgress(progressEls, s);
     if (s.stage === 'ready' && state.activeBuildId === s.buildId) {
+      // Background UI-sync or full update just finished — re-apply branding
+      // so video/buttons swap from bundled fallback to per-build assets.
+      void renderActive();
       void runUpdateCheck(s.buildId);
     }
   });

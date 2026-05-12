@@ -56,6 +56,17 @@ export class BuildRegistry extends EventEmitter {
       }
     }
     this.emit('builds-changed', registry);
+
+    // 5. background pre-warm UI assets for each build so ef-asset:// resolves
+    //    to real per-build files (video, buttons) on first launch — without
+    //    requiring the user to click PLAY first.
+    for (const entry of registry.builds) {
+      const inst = this.instances.get(entry.id);
+      if (!inst) continue;
+      void inst.updater.runUiSync(cfg).catch((err) =>
+        logger.warn('build-registry', `Background UI sync failed for ${entry.id}: ${(err as Error).message}`),
+      );
+    }
     return registry;
   }
 

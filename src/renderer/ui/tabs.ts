@@ -19,7 +19,11 @@ export function renderTabs(
     btn.textContent = e.shortName;
     btn.addEventListener('click', () => {
       if (host.isBusy()) return;
-      if (e.id === activeId) return;
+      // Don't capture activeId in closure — read current state from DOM so
+      // tab clicks work after subsequent switches (setActiveTab updates the
+      // class, but closures from the initial render would otherwise stay
+      // bound to the original activeId).
+      if (btn.classList.contains('active')) return;
       host.onSelect(e.id);
     });
     container.appendChild(btn);
