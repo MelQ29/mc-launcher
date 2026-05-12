@@ -1,11 +1,10 @@
 {
-  "name": "EclipseFantasy",
-  "version": "0.1.0",
-  "buildManifestUrl": "http://141.98.189.63/build_manifest.json",
-  "uiManifestUrl": "http://141.98.189.63/ui_manifest.json",
-  "ramMb": 4096,
-  "installPath": null,
+  "schemaVersion": 2,
+  "buildsRegistryUrl": "http://141.98.189.63/builds.json",
+  "activeBuildId": "eclipse",
+  "developerMode": false,
   "downloadConcurrency": 4,
   "downloadRetries": 5,
-  "requireValidSignature": false
+  "requireValidSignature": false,
+  "perBuild": {}
 }

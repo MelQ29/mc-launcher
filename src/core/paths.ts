@@ -1,40 +1,50 @@
 import * as path from 'path';
 import * as os from 'os';
 import { promises as fs } from 'fs';
+import type { BuildId } from './types';
 
-/**
- * Resolves all paths the launcher uses. Centralised so we never sprinkle
- * platform-specific path joining across modules. The userData root is
- * supplied by the Electron main process at startup.
- */
 export class Paths {
   constructor(private readonly userData: string, private readonly resourcesDir: string) {}
 
-  /** Root for everything the launcher manages locally. */
   get root(): string { return this.userData; }
-  /** Streaming log files. */
   get logs(): string { return path.join(this.userData, 'logs'); }
-  /** Cache directory for downloaded archives, partial files, etc. */
-  get cache(): string { return path.join(this.userData, 'cache'); }
-  /** Persisted user settings + computed config. */
   get settingsFile(): string { return path.join(this.userData, 'settings.json'); }
-  /** Lockfile describing what the launcher currently has installed. */
-  get manifestLockFile(): string { return path.join(this.userData, 'manifest.lock'); }
-  /** Cached copies of the most recent remote manifests. */
-  get buildManifestCache(): string { return path.join(this.userData, 'build_manifest.json'); }
-  get uiManifestCache(): string { return path.join(this.userData, 'ui_manifest.json'); }
-  /** Local UI cache populated from ui_manifest.json. */
-  get uiCache(): string { return path.join(this.userData, 'ui'); }
-  /** Resource path bundled with the app. Holds fallback Iss_* assets. */
+  get buildsRegistryCache(): string { return path.join(this.userData, 'builds-registry.json'); }
   get bundledAssets(): string { return path.join(this.resourcesDir, 'assets'); }
-  /** Bundled default config (read-only). */
   get bundledConfig(): string { return path.join(this.resourcesDir, 'config'); }
 
-  /** Where the modpack instance lives. May be overridden via config. */
-  instanceRoot(override: string | null): string {
+  /** Root dir for everything per-build (cache, ui, instance, lock). */
+  buildRoot(id: BuildId): string {
+    return path.join(this.userData, 'builds', id);
+  }
+
+  buildManifestCache(id: BuildId): string {
+    return path.join(this.buildRoot(id), 'build_manifest.json');
+  }
+  uiManifestCache(id: BuildId): string {
+    return path.join(this.buildRoot(id), 'ui_manifest.json');
+  }
+  newsCache(id: BuildId): string {
+    return path.join(this.buildRoot(id), 'news.json');
+  }
+  manifestLockFile(id: BuildId): string {
+    return path.join(this.buildRoot(id), 'manifest.lock');
+  }
+  uiCache(id: BuildId): string {
+    return path.join(this.buildRoot(id), 'ui');
+  }
+  cache(id: BuildId): string {
+    return path.join(this.buildRoot(id), 'cache');
+  }
+
+  /**
+   * Where the modpack files (`instance/`) live. Custom override path is
+   * absolute; otherwise default is buildRoot/instance.
+   */
+  instanceRoot(id: BuildId, override: string | null): string {
     return override && override.trim().length > 0
       ? path.resolve(override)
-      : path.join(this.userData, 'instance');
+      : path.join(this.buildRoot(id), 'instance');
   }
 
   /** Detect the official Minecraft launcher directory across platforms. */
@@ -49,17 +59,34 @@ export class Paths {
     return path.join(os.homedir(), '.minecraft');
   }
 
-  async ensureDirs(instancePath: string): Promise<void> {
+  async ensureBuildDirs(id: BuildId, instancePath: string): Promise<void> {
     const dirs = [
       this.logs,
-      this.cache,
-      this.uiCache,
+      this.buildRoot(id),
+      this.uiCache(id),
+      this.cache(id),
       instancePath,
       path.join(instancePath, 'mods'),
       path.join(instancePath, 'config'),
       path.join(instancePath, 'resourcepacks'),
       path.join(instancePath, 'cache'),
     ];
-    await Promise.all(dirs.map((d) => fs.mkdir(d, { recursive: true })));
+    await Promise.all(dirs.map(ensureDir));
+  }
+}
+
+/**
+ * Idempotent mkdir that tolerates a known Windows quirk: calling `fs.mkdir`
+ * on a drive root (e.g. `G:\\`) with `recursive: true` throws EPERM even
+ * though the directory already exists. If the path exists as a directory
+ * after the failed mkdir, that's fine — only re-throw for real failures.
+ */
+async function ensureDir(p: string): Promise<void> {
+  try {
+    await fs.mkdir(p, { recursive: true });
+  } catch (err) {
+    const stat = await fs.stat(p).catch(() => null);
+    if (stat?.isDirectory()) return;
+    throw err;
   }
 }

@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-05-12T20:00:00Z",
+  "defaultBuildId": "eclipse",
+  "builds": [
+    {
+      "id": "eclipse",
+      "displayName": "Eclipse Fantasy",
+      "shortName": "ECLIPSE",
+      "buildManifestUrl": "http://141.98.189.63/eclipse/build_manifest.json",
+      "uiManifestUrl":    "http://141.98.189.63/eclipse/ui_manifest.json",
+      "newsUrl":          "http://141.98.189.63/eclipse/news.json",
+      "accentColor": "#ffd144",
+      "enabled": true,
+      "order": 1
+    },
+    {
+      "id": "summermon",
+      "displayName": "FTB Summermon",
+      "shortName": "SUMMERMON",
+      "buildManifestUrl": "http://141.98.189.63/summermon/build_manifest.json",
+      "uiManifestUrl":    "http://141.98.189.63/summermon/ui_manifest.json",
+      "newsUrl":          "http://141.98.189.63/summermon/news.json",
+      "accentColor": "#f54c40",
+      "enabled": true,
+      "order": 2
+    }
+  ]
+}

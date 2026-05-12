@@ -1,15 +1,14 @@
-import { app, BrowserWindow, dialog, protocol, shell } from 'electron';
+import { app, BrowserWindow, dialog, net, protocol, shell } from 'electron';
+import { pathToFileURL } from 'url';
 import * as path from 'path';
 import { promises as fs } from 'fs';
 import { logger } from '../core/logger';
 import { Paths } from '../core/paths';
 import { ConfigStore } from '../core/config';
-import { ManifestService } from '../manifest/manifest';
-import { InstanceStorage } from '../storage/instance';
-import { Updater } from '../update/updater';
 import { selfUpdater } from '../update/self-updater';
-import { GameLauncher } from '../launcher/launcher';
 import { registerIpc } from './ipc';
+import { BuildRegistry } from '../builds/registry';
+import { BuildInstance } from '../builds/build-instance';
 
 /**
  * Electron main process entry. Wires up:
@@ -23,8 +22,6 @@ let mainWindow: BrowserWindow | null = null;
 
 async function bootstrap(): Promise<void> {
   const userData = app.getPath('userData');
-  // In packaged builds, extraResources lands under process.resourcesPath; in
-  // dev we read straight from the project tree (dist/main/main -> ../../..).
   const resourcesDir = app.isPackaged
     ? process.resourcesPath
     : path.resolve(__dirname, '..', '..', '..');
@@ -35,34 +32,47 @@ async function bootstrap(): Promise<void> {
 
   const config = new ConfigStore(paths.settingsFile, paths.bundledConfig);
   await config.load();
-  const instance = new InstanceStorage(paths.instanceRoot(config.current.installPath));
-  await paths.ensureDirs(instance.path);
 
-  const manifests = new ManifestService(paths.buildManifestCache, paths.uiManifestCache, paths.manifestLockFile);
-  const updater = new Updater(paths, manifests, instance);
-  const launcher = new GameLauncher(paths);
+  const registry = new BuildRegistry({
+    paths, config,
+    createInstance: (entry) => new BuildInstance({ paths, config, entry }),
+  });
+  await registry.load();
 
   selfUpdater.init();
-  registerIpc({ paths, config, manifests, updater, launcher, instance, selfUpdater, getWindow: () => mainWindow });
+  registerIpc({ paths, config, registry, selfUpdater, getWindow: () => mainWindow });
 
-  // Kick off a self-update check shortly after the window is ready so it
-  // doesn't compete with the modpack manifest fetch on startup. Errors are
-  // swallowed; nothing should block the user from launching the modpack
-  // because the launcher itself can't reach the update server.
   setTimeout(() => { void selfUpdater.check(); }, 4000);
 
-  // Custom protocol so the renderer can address bundled and downloaded UI
-  // assets uniformly via "ef-asset://logo.png" — the main process routes the
-  // request to the on-disk file (UI cache first, then bundled fallback).
-  protocol.registerFileProtocol('ef-asset', async (request, callback) => {
+  // Use the modern protocol.handle API (vs deprecated registerFileProtocol)
+  // because net.fetch supports HTTP Range requests, which the <video> element
+  // requires to play files larger than a few megabytes — registerFileProtocol
+  // returned the whole file as a single response and silently failed for the
+  // 86 MB Summermon mp4.
+  protocol.handle('ef-asset', async (request) => {
+    // ef-asset://<buildId>/<name> — strip query string before path resolution.
     const url = decodeURIComponent(request.url.replace(/^ef-asset:\/\//, ''));
-    const safeRel = url.replace(/^[\\/]+/, '').replace(/\?.*$/, '');
-    const fromCache = path.join(paths.uiCache, safeRel);
-    const fromBundle = path.join(paths.bundledAssets, `Iss_${safeRel}`);
-    try { await fs.access(fromCache); callback({ path: fromCache }); return; } catch { /* try fallback */ }
-    try { await fs.access(fromBundle); callback({ path: fromBundle }); return; } catch { /* try fallback */ }
-    const generic = path.join(paths.bundledAssets, safeRel);
-    callback({ path: generic });
+    const bare = url.replace(/\?.*$/, '');
+    const m = bare.match(/^([a-z0-9-]+)\/(.+)$/i);
+    let resolved: string | null = null;
+    if (!m) {
+      const candidate = path.join(paths.bundledAssets, bare);
+      try { await fs.access(candidate); resolved = candidate; } catch { /* fall through */ }
+    } else {
+      const [, bid, rel] = m;
+      const safeRel = rel.replace(/^[\\/]+/, '');
+      for (const c of [
+        path.join(paths.uiCache(bid), safeRel),
+        path.join(paths.bundledAssets, `Iss_${safeRel}`),
+        path.join(paths.bundledAssets, safeRel),
+      ]) {
+        try { await fs.access(c); resolved = c; break; } catch { /* next */ }
+      }
+    }
+    if (!resolved) return new Response('Not found', { status: 404 });
+    // Hand off to Electron's net.fetch for file:// — handles Range, MIME,
+    // streaming. Propagate the original request headers (especially Range).
+    return net.fetch(pathToFileURL(resolved).toString(), { headers: request.headers });
   });
 
   await app.whenReady();
@@ -105,6 +115,24 @@ async function createWindow(): Promise<void> {
   await win.loadFile(indexPath);
   if (process.argv.includes('--dev')) win.webContents.openDevTools({ mode: 'detach' });
 }
+
+// Register the ef-asset:// scheme as privileged BEFORE app.whenReady().
+// The `stream: true` privilege is what makes <video>/<audio> request Range
+// (bytes=N-) headers and treat the response as a streaming body — without
+// it, Chromium tries to buffer the whole response synchronously and silently
+// fails on large files like the 86 MB Summermon background.mp4.
+// See https://www.electronjs.org/docs/latest/api/protocol
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'ef-asset',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+    },
+  },
+]);
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

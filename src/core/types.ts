@@ -12,13 +12,28 @@ export interface ManagedFileEntry {
   url?: string;
 }
 
+export type Modloader = 'fabric' | 'neoforge';
+
 export interface BuildManifest {
+  /** ID of the build from builds.json (matches BuildEntry.id). */
+  buildId?: string;
   /** Human-readable build version, e.g. "2026.04.26-1". */
   version: string;
   /** Minecraft release this build targets, e.g. "1.20.1". */
   minecraft: string;
-  /** Fabric loader version, e.g. "0.16.14". */
-  fabricLoader: string;
+  /** Modloader kind. Default 'fabric' when absent (legacy). */
+  modloader?: Modloader;
+  /** Loader version (Fabric: "0.16.14"; NeoForge: "21.1.226"). */
+  loaderVersion?: string;
+  /**
+   * Override URL for the loader's installer JAR. When absent, the launcher
+   * computes the default (Fabric Meta for fabric, maven.neoforged.net for
+   * neoforge). Useful when the upstream is flaky and you want to mirror the
+   * installer on the modpack-hosting VPS.
+   */
+  loaderInstallerUrl?: string;
+  /** @deprecated Legacy; same as loaderVersion when modloader='fabric'. */
+  fabricLoader?: string;
   /** Direct URL to the modpack archive (zip or 7z). */
   archiveUrl: string;
   /** SHA-256 of the archive itself. */
@@ -35,6 +50,8 @@ export interface BuildManifest {
   recommendedRamMb?: number;
   /** Minimum JVM heap (MiB). Below this the launch warns the user. */
   minRamMb?: number;
+  /** UI assets referenced by the renderer via ef-asset://<id>/<file>. */
+  branding?: BrandingManifest;
 }
 
 export interface UiManifest {
@@ -59,22 +76,20 @@ export interface ManifestLock {
 }
 
 export interface LauncherConfig {
-  name: string;
-  version: string;
-  buildManifestUrl: string;
-  uiManifestUrl: string;
+  schemaVersion: 2;
+  buildsRegistryUrl: string;
+  activeBuildId: BuildId;
+  developerMode: boolean;
   /** Optional public key (hex, ed25519) to verify manifest signatures. */
   signaturePublicKey?: string;
-  /** RAM allocation in MiB. */
-  ramMb: number;
-  /** Override install path. If null, defaults to userData/instance. */
-  installPath: string | null;
   /** Maximum concurrent file downloads. */
   downloadConcurrency: number;
   /** Maximum retry attempts for a single file. */
   downloadRetries: number;
   /** Refuse to launch if manifest signature is missing/invalid. */
   requireValidSignature: boolean;
+  /** Per-build configuration (RAM allocation, install path). */
+  perBuild: Record<BuildId, PerBuildConfig>;
 }
 
 export interface DownloadProgress {
@@ -102,6 +117,7 @@ export type UpdateStage =
   | 'error';
 
 export interface UpdateState {
+  buildId: BuildId;
   stage: UpdateStage;
   message: string;
   progress?: DownloadProgress;
@@ -113,6 +129,83 @@ export interface LogEntry {
   level: 'debug' | 'info' | 'warn' | 'error';
   scope: string;
   message: string;
+}
+
+/* === Multi-build types =================================================== */
+
+export type BuildId = string;
+
+export interface BuildEntry {
+  id: BuildId;
+  displayName: string;
+  shortName: string;
+  buildManifestUrl: string;
+  uiManifestUrl: string;
+  newsUrl: string;
+  accentColor: string;
+  enabled: boolean;
+  order: number;
+}
+
+export interface BuildsRegistry {
+  schemaVersion: 1;
+  generatedAt?: string;
+  defaultBuildId: BuildId;
+  builds: BuildEntry[];
+  signature?: string;
+}
+
+export interface PerBuildConfig {
+  ramMb: number;
+  installPath: string | null;
+}
+
+export interface BrandingManifest {
+  video: string;
+  playButton: string;
+  optionsButton: string;
+  replaceButton: string;
+}
+
+export type NewsEntryType = 'changelog' | 'event' | 'notice';
+
+export interface NewsEntry {
+  id: string;
+  date: string;            // YYYY-MM-DD
+  type: NewsEntryType;
+  title: string;
+  body: string;
+  eventStart?: string;     // ISO 8601
+  eventEnd?: string;       // ISO 8601
+  url?: string;
+}
+
+export interface NewsFeed {
+  schemaVersion: 1;
+  buildId: BuildId;
+  generatedAt?: string;
+  entries: NewsEntry[];
+  signature?: string;
+}
+
+export interface BuildState {
+  id: BuildId;
+  displayName: string;
+  shortName: string;
+  accentColor: string;
+  installed: boolean;
+  installedVersion: string | null;
+  /** Latest version available remotely (from build_manifest.version). */
+  availableVersion?: string;
+  updateNeeded: boolean | null;   // null = не проверяли
+  branding: BrandingManifest | null;
+  /** Minecraft release this build targets (from build_manifest). */
+  minecraft?: string;
+  /** Modloader kind (from build_manifest), default 'fabric' if absent. */
+  modloader?: Modloader;
+  /** Loader version (from build_manifest). */
+  loaderVersion?: string;
+  lastError?: string;
 }
 
 /** Public surface of the API exposed to the renderer via contextBridge. */

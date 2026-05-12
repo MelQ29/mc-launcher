@@ -20,12 +20,12 @@ export function verifyManifestSignature(
   const sig = typeof manifest.signature === 'string' ? manifest.signature : undefined;
   if (!sig) {
     if (required) return { ok: false, reason: 'manifest is unsigned but signature is required' };
-    logger.warn('signature', 'Manifest is unsigned (signature field missing)');
+    logger.debug('signature', 'Manifest is unsigned (signature field missing)');
     return { ok: true };
   }
   if (!publicKey) {
     if (required) return { ok: false, reason: 'no public key configured for verification' };
-    logger.warn('signature', 'Manifest has signature but no public key configured — skipping verification');
+    logger.debug('signature', 'Manifest has signature but no public key configured — skipping verification');
     return { ok: true };
   }
   try {

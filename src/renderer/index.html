@@ -3,34 +3,22 @@
   <head>
     <meta charset="utf-8" />
     <meta http-equiv="Content-Security-Policy"
-          content="default-src 'self'; img-src 'self' ef-asset: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'" />
+          content="default-src 'self'; img-src 'self' ef-asset: data:; media-src 'self' ef-asset:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'" />
     <title>EclipseFantasy Launcher</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <!-- Full-bleed background image (modpack art). -->
-    <div class="bg" id="frameBackground"></div>
-    <div class="bg-vignette"></div>
+    <div class="bg-fallback" id="bgFallback"></div>
 
-    <!-- Self-update banner (shown when a new launcher version is available). -->
     <div class="self-update-banner" id="selfUpdateBanner" hidden>
       <div class="self-update-msg" id="selfUpdateMsg">Доступно обновление лаунчера</div>
       <button class="self-update-btn" id="selfUpdateBtn" hidden>Перезапустить и обновить</button>
     </div>
 
-    <!-- Top bar: version chips + tool buttons. -->
     <header class="topbar">
-      <div class="chips">
-        <div class="chip" id="versionChip">
-          <span class="chip-label">Сборка</span>
-          <span class="chip-value" id="buildVersion">—</span>
-        </div>
-        <div class="chip" id="installedChip">
-          <span class="chip-label">Установлено</span>
-          <span class="chip-value" id="installedVersion">—</span>
-        </div>
-      </div>
-      <div class="tools">
+      <div class="tab-row" id="tabRow"></div>
+      <div class="header-tools">
+        <div class="chip" id="versionChip"><span class="chip-label">v</span><span id="versionChipValue">—</span></div>
         <button class="icon-btn" id="logsBtn" title="Логи" aria-label="Логи">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg>
         </button>
@@ -40,39 +28,36 @@
       </div>
     </header>
 
-    <!-- Optional centered banner image (collapsed if no logo asset is available). -->
-    <section class="banner" id="frameBanner">
-      <img id="bannerLogo" alt="EclipseFantasy" />
-    </section>
+    <main class="main-grid">
+      <section class="video-block" id="videoBlock">
+        <video id="bgVideo" autoplay loop muted playsinline preload="auto"></video>
+      </section>
 
-    <!-- Spacer pushes the action area to the bottom. -->
-    <div class="spacer"></div>
-
-    <!-- Action area: progress + launch button. -->
-    <section class="action">
-      <div class="progress-wrap" id="progressWrap" hidden>
-        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
-        <div class="progress-meta">
-          <span id="progressText"></span>
-          <span id="progressSpeed"></span>
+      <aside class="news-panel" id="newsPanel">
+        <h2 class="news-title">Чейнджлог</h2>
+        <ul class="news-list" id="newsList"></ul>
+        <div class="version-info" id="versionInfo">—</div>
+        <div class="progress-block" id="progressBlock" hidden>
+          <div class="pb-status" id="progressStatus">—</div>
+          <div class="pbar"><div class="pbar-fill" id="progressFill"></div></div>
+          <div class="pb-meta">
+            <span id="progressText">—</span>
+            <span id="progressSpeed">—</span>
+          </div>
         </div>
-      </div>
-      <div class="status-line" id="statusLine">Загрузка...</div>
-      <button id="launchBtn" type="button" disabled>
-        <img id="launchBtnImg" alt="Запуск" />
-      </button>
-      <div class="status-sub" id="launchBtnText">Загрузка...</div>
-    </section>
+        <button class="launch-btn" id="launchBtn" disabled>
+          <img id="launchBtnImg" alt="PLAY" />
+        </button>
+        <div class="launch-sub" id="launchSubLabel">—</div>
+      </aside>
+    </main>
 
-    <!-- Settings modal. -->
     <div class="modal" id="settingsModal" hidden>
       <div class="modal-backdrop" data-close="settingsModal"></div>
-      <div class="modal-card" role="dialog" aria-labelledby="settingsTitle">
+      <div class="modal-card" role="dialog">
         <header class="modal-head">
-          <h2 id="settingsTitle">Настройки</h2>
-          <button class="icon-btn close" data-close="settingsModal" aria-label="Закрыть">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
+          <h2>Настройки сборки: <span id="settingsBuildName">—</span></h2>
+          <button class="icon-btn close" data-close="settingsModal">✕</button>
         </header>
         <div class="modal-body">
           <div class="field">
@@ -101,14 +86,49 @@
             </div>
           </div>
 
-          <div class="field">
-            <label for="buildUrlInput">URL build_manifest.json</label>
-            <input id="buildUrlInput" type="text" />
+          <hr class="sep" />
+
+          <div class="field dev-toggle-row">
+            <label class="checkbox">
+              <input type="checkbox" id="devModeToggle" />
+              <span>Режим разработчика</span>
+            </label>
+            <div class="dev-prompt" id="devPrompt" hidden>
+              <input type="password" id="devPasswordInput" placeholder="Пароль разработчика" />
+              <button class="ghost-btn" id="devSubmitBtn" type="button">Подтвердить</button>
+              <button class="link-btn" id="devCancelBtn" type="button">Отмена</button>
+              <div class="dev-error" id="devError" hidden>Неверный пароль</div>
+            </div>
           </div>
 
-          <div class="field">
-            <label for="uiUrlInput">URL ui_manifest.json</label>
-            <input id="uiUrlInput" type="text" />
+          <div class="dev-section" id="devSection" hidden>
+            <h3>🛠 Расширенные настройки</h3>
+            <div class="field">
+              <label for="concInput">Параллельные загрузки</label>
+              <input id="concInput" type="number" min="1" max="16" />
+            </div>
+            <div class="field">
+              <label for="retriesInput">Повторы при ошибках</label>
+              <input id="retriesInput" type="number" min="0" max="20" />
+            </div>
+            <div class="field">
+              <label for="registryUrlInput">URL реестра сборок</label>
+              <input id="registryUrlInput" type="text" />
+            </div>
+            <div class="field">
+              <label class="checkbox">
+                <input type="checkbox" id="requireSigToggle" />
+                <span>Требовать валидную подпись манифеста</span>
+              </label>
+            </div>
+            <div class="field">
+              <label for="pubKeyInput">Public key (ed25519, hex)</label>
+              <input id="pubKeyInput" type="text" />
+            </div>
+            <div class="row">
+              <button class="ghost-btn" id="devResetUiBtn" type="button">Сбросить кеш UI сборки</button>
+              <button class="ghost-btn" id="devResetLockBtn" type="button">Сбросить manifest.lock</button>
+            </div>
           </div>
 
           <div class="field-hint" id="settingsSavedHint">Изменения применяются автоматически.</div>
@@ -116,12 +136,11 @@
       </div>
     </div>
 
-    <!-- Logs modal. -->
     <div class="modal" id="logsModal" hidden>
       <div class="modal-backdrop" data-close="logsModal"></div>
-      <div class="modal-card wide" role="dialog" aria-labelledby="logsTitle">
+      <div class="modal-card wide" role="dialog">
         <header class="modal-head">
-          <h2 id="logsTitle">Логи</h2>
+          <h2>Логи</h2>
           <div class="head-tools">
             <select id="logFilter" class="ghost-btn">
               <option value="all">Все</option>
@@ -130,9 +149,7 @@
               <option value="error">Error</option>
             </select>
             <button class="ghost-btn" id="clearLogsBtn" type="button">Очистить</button>
-            <button class="icon-btn close" data-close="logsModal" aria-label="Закрыть">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
+            <button class="icon-btn close" data-close="logsModal">✕</button>
           </div>
         </header>
         <div class="modal-body logs-body">

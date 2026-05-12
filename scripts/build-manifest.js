@@ -48,7 +48,7 @@ function walk(root, base = root, out = []) {
 
 async function main() {
   const args = parseArgs(process.argv);
-  const required = ['instance', 'archive', 'version', 'minecraft', 'fabric', 'archive-url', 'out'];
+  const required = ['build-id', 'instance', 'archive', 'version', 'minecraft', 'fabric', 'archive-url', 'out'];
   for (const r of required) {
     if (!args[r]) {
       console.error(`Missing --${r}`);
@@ -73,16 +73,31 @@ async function main() {
   console.log('Hashing archive...');
   const archiveSha = await sha256(args.archive);
   const archiveStat = fs.statSync(args.archive);
+  const modloader = args.modloader || 'fabric';
+  const loaderVersion = args['loader-version'] || args.fabric;
   const manifest = {
     version: args.version,
     minecraft: args.minecraft,
-    fabricLoader: args.fabric,
+    modloader,
+    loaderVersion,
+    // Keep `fabricLoader` populated for backwards compat with older launcher
+    // builds that read only this field. Skipped for non-fabric modloaders.
+    ...(modloader === 'fabric' ? { fabricLoader: loaderVersion } : {}),
     archiveUrl: args['archive-url'],
     archiveSha256: archiveSha,
     archiveSize: archiveStat.size,
     files,
     generatedAt: new Date().toISOString(),
   };
+  if (args['build-id']) manifest.buildId = args['build-id'];
+  if (args['branding-video'] || args['branding-play']) {
+    manifest.branding = {
+      video: args['branding-video'] ?? 'background.mkv',
+      playButton: args['branding-play'] ?? 'play_button.png',
+      optionsButton: args['branding-options'] ?? 'options_button.png',
+      replaceButton: args['branding-replace'] ?? 'replace_button.png',
+    };
+  }
   fs.writeFileSync(args.out, JSON.stringify(manifest, null, 2));
   console.log(`Wrote ${args.out} (${files.length} files, archive ${archiveStat.size} bytes)`);
 }

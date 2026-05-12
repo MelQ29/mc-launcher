@@ -1,11 +1,17 @@
-import type { LauncherConfig, UpdateState, LogEntry, RendererApi, SelfUpdateState } from './api';
+import type {
+  RendererApi, LauncherConfig, UpdateState, LogEntry,
+  BuildsRegistry, BuildEntry, BuildState, BuildId, NewsEntry,
+  SelfUpdateState,
+} from './api';
+import { applyAccent, applyVideoAndButton } from './ui/branding.js';
+import { renderTabs, setActiveTab } from './ui/tabs.js';
+import { renderNews } from './ui/news-panel.js';
+import { applyProgress, type ProgressEls } from './ui/progress.js';
+import { SettingsModal } from './ui/settings-modal.js';
 
-declare global {
-  interface Window { eclipseApi: RendererApi; }
-}
+declare global { interface Window { eclipseApi: RendererApi; } }
 
 const api = window.eclipseApi;
-
 const $ = <T extends HTMLElement>(id: string): T => {
   const el = document.getElementById(id);
   if (!el) throw new Error(`missing #${id}`);
@@ -13,380 +19,309 @@ const $ = <T extends HTMLElement>(id: string): T => {
 };
 
 const els = {
-  background: $('frameBackground'),
-  banner: $('frameBanner'),
-  bannerLogo: $('bannerLogo') as HTMLImageElement,
-
-  buildVersion: $('buildVersion'),
-  installedVersion: $('installedVersion'),
-
-  progressWrap: $('progressWrap'),
+  tabRow: $('tabRow'),
+  versionChipValue: $('versionChipValue'),
+  launchBtn: $('launchBtn') as HTMLButtonElement,
+  launchBtnImg: $('launchBtnImg') as HTMLImageElement,
+  launchSubLabel: $('launchSubLabel'),
+  newsList: $('newsList'),
+  versionInfo: $('versionInfo'),
+  progressBlock: $('progressBlock'),
+  progressStatus: $('progressStatus'),
   progressFill: $('progressFill'),
   progressText: $('progressText'),
   progressSpeed: $('progressSpeed'),
-  statusLine: $('statusLine'),
-
-  launchBtn: $('launchBtn') as HTMLButtonElement,
-  launchBtnImg: $('launchBtnImg') as HTMLImageElement,
-  launchBtnText: $('launchBtnText'),
-
-  // Tools
-  settingsBtn: $('settingsBtn') as HTMLButtonElement,
-  logsBtn: $('logsBtn') as HTMLButtonElement,
-
-  // Settings modal
+  selfUpdateBanner: $('selfUpdateBanner'),
+  selfUpdateMsg: $('selfUpdateMsg'),
+  selfUpdateBtn: $('selfUpdateBtn') as HTMLButtonElement,
+  settingsBtn: $('settingsBtn'),
+  logsBtn: $('logsBtn'),
   settingsModal: $('settingsModal'),
+  logsModal: $('logsModal'),
+  logView: $('logView'),
+  logFilter: $('logFilter') as HTMLSelectElement,
+  clearLogsBtn: $('clearLogsBtn'),
+};
+
+const progressEls: ProgressEls = {
+  block: els.progressBlock, status: els.progressStatus,
+  fill: els.progressFill, text: els.progressText, speed: els.progressSpeed,
+};
+
+const settingsModal = new SettingsModal(api, {
+  card: $('settingsModal').querySelector('.modal-card') as HTMLElement,
+  buildName: $('settingsBuildName'),
   ramSlider: $('ramSlider') as HTMLInputElement,
   ramInput: $('ramInput') as HTMLInputElement,
   ramRecHint: $('ramRecHint'),
   useRecommendedBtn: $('useRecommendedBtn') as HTMLButtonElement,
   installPathInput: $('installPathInput') as HTMLInputElement,
-  buildUrlInput: $('buildUrlInput') as HTMLInputElement,
-  uiUrlInput: $('uiUrlInput') as HTMLInputElement,
   pickPathBtn: $('pickPathBtn') as HTMLButtonElement,
   installInfoPath: $('installInfoPath'),
   installInfoStats: $('installInfoStats'),
   openInstallBtn: $('openInstallBtn') as HTMLButtonElement,
+  devModeToggle: $('devModeToggle') as HTMLInputElement,
+  devPrompt: $('devPrompt'),
+  devPasswordInput: $('devPasswordInput') as HTMLInputElement,
+  devSubmitBtn: $('devSubmitBtn') as HTMLButtonElement,
+  devCancelBtn: $('devCancelBtn') as HTMLButtonElement,
+  devError: $('devError'),
+  devSection: $('devSection'),
+  concInput: $('concInput') as HTMLInputElement,
+  retriesInput: $('retriesInput') as HTMLInputElement,
+  registryUrlInput: $('registryUrlInput') as HTMLInputElement,
+  requireSigToggle: $('requireSigToggle') as HTMLInputElement,
+  pubKeyInput: $('pubKeyInput') as HTMLInputElement,
+  devResetUiBtn: $('devResetUiBtn') as HTMLButtonElement,
+  devResetLockBtn: $('devResetLockBtn') as HTMLButtonElement,
   settingsSavedHint: $('settingsSavedHint'),
+});
 
-  // Logs modal
-  logsModal: $('logsModal'),
-  logView: $('logView'),
-  logFilter: $('logFilter') as HTMLSelectElement,
-  clearLogsBtn: $('clearLogsBtn') as HTMLButtonElement,
+interface RuntimeState {
+  registry: BuildsRegistry | null;
+  states: Map<BuildId, BuildState>;
+  newsByBuild: Map<BuildId, NewsEntry[]>;
+  progressByBuild: Map<BuildId, UpdateState>;
+  activeBuildId: BuildId | null;
+  updateChecks: Map<BuildId, { recommendedRamMb?: number; needsUpdate: boolean; error?: string }>;
+  busy: boolean;
+}
 
-  // Self-update banner
-  selfUpdateBanner: $('selfUpdateBanner'),
-  selfUpdateMsg: $('selfUpdateMsg'),
-  selfUpdateBtn: $('selfUpdateBtn') as HTMLButtonElement,
+const state: RuntimeState = {
+  registry: null,
+  states: new Map(),
+  newsByBuild: new Map(),
+  progressByBuild: new Map(),
+  activeBuildId: null,
+  updateChecks: new Map(),
+  busy: false,
 };
 
-let busy = false;
-let updateNeeded = false;
-let recommendedRamMb: number | undefined;
-
-function setLaunchEnabled(enabled: boolean, label?: string): void {
-  els.launchBtn.disabled = !enabled;
-  if (label) els.launchBtnText.textContent = label;
+function activeEntry(): BuildEntry | null {
+  if (!state.registry || !state.activeBuildId) return null;
+  return state.registry.builds.find((b) => b.id === state.activeBuildId) ?? null;
 }
 
-function setStatus(text: string): void {
-  els.statusLine.textContent = text;
+function activeBuildState(): BuildState | null {
+  return state.activeBuildId ? state.states.get(state.activeBuildId) ?? null : null;
 }
 
-function appendLog(entry: LogEntry): void {
-  const line = document.createElement('span');
-  line.className = `l-${entry.level}`;
-  line.textContent = `[${entry.ts.slice(11, 19)}] [${entry.scope}] ${entry.message}\n`;
-  els.logView.appendChild(line);
-  while (els.logView.childNodes.length > 1500) els.logView.firstChild?.remove();
-  els.logView.scrollTop = els.logView.scrollHeight;
+function setBusy(v: boolean): void {
+  state.busy = v;
+  refreshLaunchButton();
 }
 
-async function loadConfigIntoUi(): Promise<LauncherConfig> {
-  const cfg = await api.getConfig();
-  els.ramInput.value = String(cfg.ramMb);
-  els.ramSlider.value = String(Math.min(Number(els.ramSlider.max), Math.max(Number(els.ramSlider.min), cfg.ramMb)));
-  els.installPathInput.value = cfg.installPath ?? '';
-  els.buildUrlInput.value = cfg.buildManifestUrl;
-  els.uiUrlInput.value = cfg.uiManifestUrl;
-  document.title = `${cfg.name} Launcher`;
-  return cfg;
-}
-
-async function loadAssets(): Promise<void> {
-  const [logoUrl, bgUrl, btnUrl] = await Promise.all([
-    api.resolveAssetUrl('logo.png'),
-    api.resolveAssetUrl('background.png'),
-    api.resolveAssetUrl('play_button.png'),
-  ]);
-  els.background.style.backgroundImage = `url("${bgUrl}")`;
-  els.launchBtnImg.src = btnUrl;
-  // Banner is optional. Probe the logo: if it's the 1×1 fallback (no real
-  // logo bundled or fetched), collapse the row entirely.
-  const probe = new Image();
-  probe.onload = () => {
-    if (probe.naturalHeight < 8) document.body.classList.add('no-banner');
-    else els.bannerLogo.src = logoUrl;
-  };
-  probe.onerror = () => document.body.classList.add('no-banner');
-  probe.src = logoUrl;
-}
-
-function applyState(state: UpdateState): void {
-  setStatus(state.message);
-  if (state.progress && (state.progress.totalBytes > 0 || state.progress.filesTotal > 0)) {
-    els.progressWrap.hidden = false;
-    const { totalBytes, downloadedBytes, speed, filesDone, filesTotal } = state.progress;
-    let pct = 0;
-    let textParts: string[] = [];
-    if (totalBytes > 0) {
-      pct = Math.min(100, (downloadedBytes / totalBytes) * 100);
-      textParts.push(`${formatBytes(downloadedBytes)} / ${formatBytes(totalBytes)}`);
-    } else if (filesTotal > 0) {
-      pct = (filesDone / filesTotal) * 100;
-      textParts.push(`${filesDone} / ${filesTotal} файлов`);
-    }
-    textParts.push(`${pct.toFixed(1)}%`);
-    els.progressFill.style.width = `${pct}%`;
-    els.progressText.textContent = textParts.join('  •  ');
-    els.progressSpeed.textContent = speed && speed > 0
-      ? `${formatBytes(speed)}/s${etaText(totalBytes - downloadedBytes, speed)}`
-      : '';
-  } else {
-    els.progressWrap.hidden = true;
+function refreshLaunchButton(): void {
+  const bs = activeBuildState();
+  const check = state.activeBuildId ? state.updateChecks.get(state.activeBuildId) : undefined;
+  if (!bs) { els.launchBtn.disabled = true; els.launchSubLabel.textContent = 'Загрузка…'; return; }
+  if (state.busy) { els.launchBtn.disabled = true; els.launchSubLabel.textContent = 'Работаю…'; return; }
+  if (check?.error) {
+    if (bs.installed) { els.launchBtn.disabled = false; els.launchSubLabel.textContent = 'Запуск (оффлайн)'; }
+    else { els.launchBtn.disabled = true; els.launchSubLabel.textContent = 'Нет соединения'; }
+    return;
   }
-  if (state.stage === 'error') {
-    setStatus(state.error ?? state.message);
-    setLaunchEnabled(false, 'Ошибка');
-  }
-  if (state.stage === 'ready' && !busy) setLaunchEnabled(true, 'Запуск');
+  els.launchBtn.disabled = false;
+  if (!bs.installed) els.launchSubLabel.textContent = 'Скачать и запустить';
+  else if (check?.needsUpdate) els.launchSubLabel.textContent = 'Обновить и запустить';
+  else els.launchSubLabel.textContent = 'Запуск';
 }
 
-function etaText(remainingBytes: number, speed: number): string {
-  if (!Number.isFinite(remainingBytes) || remainingBytes <= 0 || speed <= 0) return '';
-  const secs = remainingBytes / speed;
-  const m = Math.floor(secs / 60);
-  const s = Math.floor(secs % 60);
-  return `  •  ETA ${m}m ${s.toString().padStart(2, '0')}s`;
+async function selectBuild(id: BuildId): Promise<void> {
+  if (state.busy) return;
+  await api.setActiveBuild(id);
+  state.activeBuildId = id;
+  setActiveTab(els.tabRow, id);
+  await renderActive();
+  // Kick off async updates that don't block UI
+  void api.fetchNews(id);
+  void runUpdateCheck(id);
 }
 
-async function refreshVersionInfo(): Promise<void> {
-  const installed = await api.getInstalledVersion();
-  els.installedVersion.textContent = installed ?? 'не установлено';
+async function renderActive(): Promise<void> {
+  const entry = activeEntry();
+  const bs = activeBuildState();
+  if (!entry || !bs) return;
+
+  applyAccent(entry.accentColor);
+  await applyVideoAndButton(entry, bs, api.resolveAssetUrl.bind(api));
+
+  // Version chip shows the build's available version (from manifest), not
+  // the installed one — users want to see what version the build IS, even
+  // before they install. Install state is conveyed via the launch button
+  // text and the versionInfo line below.
+  const displayVersion = bs.availableVersion ?? bs.installedVersion ?? '—';
+  els.versionChipValue.textContent = displayVersion;
+  const loaderLabel = bs.modloader === 'neoforge' ? 'NeoForge' : 'Fabric';
+  const mcLabel = bs.minecraft ?? '—';
+  const loaderVer = bs.loaderVersion ? ` ${bs.loaderVersion}` : '';
+  const statusSuffix = bs.installedVersion
+    ? bs.installedVersion === bs.availableVersion ? ' · установлено' : ` · установлено v${escapeHtml(bs.installedVersion)}`
+    : ' · не установлено';
+  els.versionInfo.innerHTML = `v${escapeHtml(displayVersion)} · MC ${escapeHtml(mcLabel)} / ${loaderLabel}${escapeHtml(loaderVer)}${statusSuffix}`;
+
+  // News
+  const news = state.newsByBuild.get(entry.id) ?? [];
+  renderNews(els.newsList, news);
+
+  // Progress
+  applyProgress(progressEls, state.progressByBuild.get(entry.id));
+
+  refreshLaunchButton();
+}
+
+async function runUpdateCheck(id: BuildId): Promise<void> {
   try {
-    const result = await api.checkForUpdates();
-    if (result.error) {
-      els.buildVersion.textContent = 'недоступно';
-      if (installed) setLaunchEnabled(true, 'Запуск (оффлайн)');
-      else setLaunchEnabled(false, 'Манифест недоступен');
-      return;
-    }
-    els.buildVersion.textContent = result.buildVersion;
-    updateNeeded = result.needsUpdate;
-    recommendedRamMb = result.recommendedRamMb;
-    refreshRecommendedRamHint();
-    if (result.needsUpdate) setLaunchEnabled(true, 'Обновить и запустить');
-    else setLaunchEnabled(true, 'Запуск');
+    const r = await api.checkForUpdates(id);
+    state.updateChecks.set(id, { recommendedRamMb: r.recommendedRamMb, needsUpdate: r.needsUpdate, error: r.error });
+    if (state.activeBuildId === id) refreshLaunchButton();
   } catch (err) {
-    els.buildVersion.textContent = 'недоступно';
-    if (installed) setLaunchEnabled(true, 'Запуск (оффлайн)');
-    else setLaunchEnabled(false, 'Нет соединения');
-  }
-}
-
-function refreshRecommendedRamHint(): void {
-  if (recommendedRamMb && recommendedRamMb > 0) {
-    els.ramRecHint.textContent = `Рекомендуется: ${recommendedRamMb} MB`;
-    const current = Number(els.ramInput.value);
-    els.useRecommendedBtn.hidden = current >= recommendedRamMb;
-  } else {
-    els.ramRecHint.textContent = 'Рекомендуемое значение не задано в манифесте';
-    els.useRecommendedBtn.hidden = true;
+    state.updateChecks.set(id, { needsUpdate: false, error: (err as Error).message });
+    if (state.activeBuildId === id) refreshLaunchButton();
   }
 }
 
 async function handleLaunch(): Promise<void> {
-  if (busy) return;
-  busy = true;
-  setLaunchEnabled(false, 'Работаю...');
+  if (state.busy) return;
+  const id = state.activeBuildId; if (!id) return;
+  setBusy(true);
   try {
-    if (updateNeeded || !(await api.getInstalledVersion())) {
-      await api.runUpdate();
-      updateNeeded = false;
-    }
-    const result = await api.launchGame();
+    const check = state.updateChecks.get(id);
+    const needs = check?.needsUpdate || !(await api.getInstalledVersion(id));
+    if (needs) await api.runUpdate(id);
+    const result = await api.launchGame(id);
     if (result.ok) {
-      // The official Minecraft Launcher detaches immediately, so we can't
-      // observe its lifecycle. Flash "Запущено" briefly and then re-enable
-      // the button so the user can launch again (e.g. after closing MC).
-      setLaunchEnabled(false, 'Запущено');
-      window.setTimeout(() => {
-        if (!busy) setLaunchEnabled(true, updateNeeded ? 'Обновить и запустить' : 'Запуск');
-      }, 2500);
+      els.launchSubLabel.textContent = 'Запущено';
+      setTimeout(() => { setBusy(false); refreshLaunchButton(); }, 2500);
     } else {
-      setLaunchEnabled(true, 'Открой Minecraft Launcher вручную');
+      els.launchSubLabel.textContent = 'Откройте Minecraft Launcher вручную';
+      setBusy(false);
     }
+    const installedVersion = (await api.getInstalledVersion(id)) ?? null;
+    const prev = state.states.get(id);
+    if (prev) {
+      state.states.set(id, { ...prev, installed: installedVersion !== null, installedVersion });
+    }
+    if (check) state.updateChecks.set(id, { ...check, needsUpdate: false });
   } catch (err) {
-    setLaunchEnabled(true, 'Повторить');
     appendLog({ ts: new Date().toISOString(), level: 'error', scope: 'ui', message: (err as Error).message });
-  } finally {
-    busy = false;
+    els.launchSubLabel.textContent = 'Повторить';
+    setBusy(false);
   }
 }
 
-/* ─────────── Settings auto-save ─────────── */
-
-let saveTimer: number | null = null;
-function scheduleSave(): void {
-  if (saveTimer != null) window.clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(() => { void handleSaveSettings(); }, 350);
-  els.settingsSavedHint.textContent = 'Сохраняю...';
+function appendLog(entry: LogEntry): void {
+  const span = document.createElement('span');
+  span.className = `l-${entry.level}`;
+  span.textContent = `[${entry.ts.slice(11, 19)}] [${entry.scope}] ${entry.message}\n`;
+  els.logView.appendChild(span);
+  while (els.logView.childNodes.length > 1500) els.logView.firstChild?.remove();
+  els.logView.scrollTop = els.logView.scrollHeight;
 }
 
-async function handleSaveSettings(): Promise<void> {
-  const ram = clamp(Number(els.ramInput.value) || 4096, 512, 65536);
-  const patch: Partial<LauncherConfig> = {
-    ramMb: ram,
-    installPath: els.installPathInput.value.trim() || null,
-    buildManifestUrl: els.buildUrlInput.value.trim(),
-    uiManifestUrl: els.uiUrlInput.value.trim(),
-  };
-  await api.saveConfig(patch);
-  els.settingsSavedHint.textContent = 'Сохранено ✓';
-  // Reflect any normalisation back into the inputs.
-  els.ramInput.value = String(ram);
-  els.ramSlider.value = String(Math.min(Number(els.ramSlider.max), Math.max(Number(els.ramSlider.min), ram)));
-  refreshRecommendedRamHint();
-}
-
-function clamp(n: number, lo: number, hi: number): number {
-  return Math.max(lo, Math.min(hi, n));
-}
-
-async function refreshInstallInfo(): Promise<void> {
-  try {
-    const info = await api.getInstallInfo();
-    els.installInfoPath.textContent = info.path + (info.isCustomPath ? '  (кастомный)' : '');
-    if (!info.exists) {
-      els.installInfoStats.textContent = 'Папка ещё не создана — будет создана при первой установке';
-      return;
-    }
-    const total = Object.values(info.counts).reduce((s, n) => s + n, 0);
-    const sizeText = info.totalBytes > 0 ? `, ${formatBytes(info.totalBytes)}` : '';
-    const parts: string[] = [];
-    for (const [k, v] of Object.entries(info.counts)) parts.push(`${k}: ${v}`);
-    els.installInfoStats.textContent = `${total} файлов в управляемых папках${sizeText} • ${parts.join(' • ')}`;
-  } catch (err) {
-    els.installInfoStats.textContent = `недоступно: ${(err as Error).message}`;
-  }
-}
-
-/* ─────────── Modals ─────────── */
-
-function openModal(id: string): void {
-  const m = document.getElementById(id);
-  if (m) m.hidden = false;
-}
-function closeModal(id: string): void {
-  const m = document.getElementById(id);
-  if (m) m.hidden = true;
-}
-
-/* ─────────── Boot ─────────── */
-
-function formatBytes(n: number): string {
-  if (!Number.isFinite(n) || n <= 0) return '0 B';
-  const units = ['B', 'KiB', 'MiB', 'GiB'];
-  let u = 0;
-  let v = n;
-  while (v >= 1024 && u < units.length - 1) { v /= 1024; u++; }
-  return `${v.toFixed(v >= 100 ? 0 : 1)} ${units[u]}`;
-}
-
-function applySelfUpdate(state: SelfUpdateState): void {
-  const banner = els.selfUpdateBanner;
-  const msg = els.selfUpdateMsg;
-  const btn = els.selfUpdateBtn;
-  switch (state.status) {
-    case 'idle':
-    case 'checking':
-    case 'not-available':
-      banner.hidden = true;
-      break;
+function applySelfUpdate(s: SelfUpdateState): void {
+  switch (s.status) {
+    case 'idle': case 'checking': case 'not-available':
+      els.selfUpdateBanner.hidden = true; break;
     case 'available':
-      banner.hidden = false;
-      msg.textContent = `Найдено обновление лаунчера v${state.version} — скачиваю...`;
-      btn.hidden = true;
-      break;
-    case 'downloading': {
-      banner.hidden = false;
-      const pct = state.percent ? state.percent.toFixed(0) : '0';
-      msg.textContent = `Скачиваю обновление лаунчера: ${pct}%`;
-      btn.hidden = true;
-      break;
-    }
+      els.selfUpdateBanner.hidden = false;
+      els.selfUpdateMsg.textContent = `Найдено обновление лаунчера v${s.version} — скачиваю…`;
+      els.selfUpdateBtn.hidden = true; break;
+    case 'downloading':
+      els.selfUpdateBanner.hidden = false;
+      els.selfUpdateMsg.textContent = `Скачиваю обновление лаунчера: ${(s.percent ?? 0).toFixed(0)}%`;
+      els.selfUpdateBtn.hidden = true; break;
     case 'ready':
-      banner.hidden = false;
-      msg.textContent = `Готово к установке: лаунчер v${state.version}`;
-      btn.hidden = false;
-      break;
+      els.selfUpdateBanner.hidden = false;
+      els.selfUpdateMsg.textContent = `Готово к установке: лаунчер v${s.version}`;
+      els.selfUpdateBtn.hidden = false; break;
     case 'error':
-      // Don't pester the user with a banner for self-update errors — log only.
-      banner.hidden = true;
-      appendLog({
-        ts: new Date().toISOString(), level: 'warn', scope: 'self-update',
-        message: state.error ?? 'unknown error',
-      });
+      els.selfUpdateBanner.hidden = true;
+      appendLog({ ts: new Date().toISOString(), level: 'warn', scope: 'self-update', message: s.error ?? 'unknown error' });
       break;
   }
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]!);
 }
 
 async function bootstrap(): Promise<void> {
+  // Subscriptions
   api.onLog(appendLog);
-  api.onUpdateState(applyState);
   api.onSelfUpdate(applySelfUpdate);
-  els.selfUpdateBtn.addEventListener('click', () => { void api.selfUpdate.install(); });
+  api.onUpdateState((s) => {
+    state.progressByBuild.set(s.buildId, s);
+    if (state.activeBuildId === s.buildId) applyProgress(progressEls, s);
+    if (s.stage === 'ready') {
+      // UI sync or full update just finished — refresh build states from
+      // main (branding may have just been cached to disk) so the next
+      // renderActive() picks up per-build video/button filenames.
+      void (async () => {
+        const list = await api.listBuilds();
+        for (const ns of list.states) state.states.set(ns.id, ns);
+        if (state.activeBuildId === s.buildId) {
+          await renderActive();
+          void runUpdateCheck(s.buildId);
+        }
+      })();
+    }
+  });
+  api.onNewsUpdated((m) => {
+    state.newsByBuild.set(m.buildId, m.entries);
+    if (m.buildId === state.activeBuildId) renderNews(els.newsList, m.entries);
+  });
+  api.onRegistryChanged(async (reg) => { await onRegistry(reg); });
+  api.onActiveChanged(({ id }) => {
+    state.activeBuildId = id;
+    setActiveTab(els.tabRow, id);
+    void renderActive();
+  });
 
   els.launchBtn.addEventListener('click', () => { void handleLaunch(); });
-
-  // Tool buttons
-  els.settingsBtn.addEventListener('click', () => { openModal('settingsModal'); void refreshInstallInfo(); });
-  els.openInstallBtn.addEventListener('click', () => { void api.openInstallFolder(); });
-  els.logsBtn.addEventListener('click', () => openModal('logsModal'));
+  els.settingsBtn.addEventListener('click', async () => {
+    const bs = activeBuildState(); if (!bs) return;
+    const check = state.activeBuildId ? state.updateChecks.get(state.activeBuildId) : undefined;
+    await settingsModal.show(bs, check?.recommendedRamMb);
+  });
+  els.logsBtn.addEventListener('click', () => { els.logsModal.hidden = false; });
   document.querySelectorAll('[data-close]').forEach((el) => {
-    el.addEventListener('click', () => closeModal((el as HTMLElement).dataset.close!));
+    el.addEventListener('click', () => {
+      const id = (el as HTMLElement).dataset.close!;
+      const m = document.getElementById(id); if (m) m.hidden = true;
+    });
   });
-  // ESC closes any open modal.
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      els.settingsModal.hidden = true;
-      els.logsModal.hidden = true;
-    }
-  });
-
-  // Settings: keep slider/input in sync, autosave on change.
-  els.ramInput.addEventListener('input', () => {
-    const v = clamp(Number(els.ramInput.value) || 0, 512, 65536);
-    if (v >= Number(els.ramSlider.min) && v <= Number(els.ramSlider.max)) {
-      els.ramSlider.value = String(v);
-    }
-    refreshRecommendedRamHint();
-    scheduleSave();
-  });
-  els.ramSlider.addEventListener('input', () => {
-    els.ramInput.value = els.ramSlider.value;
-    refreshRecommendedRamHint();
-    scheduleSave();
-  });
-  els.installPathInput.addEventListener('change', scheduleSave);
-  els.buildUrlInput.addEventListener('change', scheduleSave);
-  els.uiUrlInput.addEventListener('change', scheduleSave);
-  els.useRecommendedBtn.addEventListener('click', () => {
-    if (!recommendedRamMb) return;
-    els.ramInput.value = String(recommendedRamMb);
-    els.ramSlider.value = String(Math.min(Number(els.ramSlider.max), Math.max(Number(els.ramSlider.min), recommendedRamMb)));
-    refreshRecommendedRamHint();
-    scheduleSave();
-  });
-  els.pickPathBtn.addEventListener('click', async () => {
-    const picked = await api.pickInstallPath();
-    if (picked) {
-      els.installPathInput.value = picked;
-      scheduleSave();
-    }
-  });
-
-  // Logs filter + clear
+  els.selfUpdateBtn.addEventListener('click', () => { void api.selfUpdate.install(); });
   els.logFilter.addEventListener('change', () => {
     const f = els.logFilter.value;
     els.logView.className = f === 'all' ? '' : `f-${f}`;
   });
   els.clearLogsBtn.addEventListener('click', () => { els.logView.innerHTML = ''; });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { els.settingsModal.hidden = true; els.logsModal.hidden = true; }
+  });
 
-  await loadConfigIntoUi();
-  await loadAssets();
-  await refreshVersionInfo();
+  // Initial fetch
+  const list = await api.listBuilds();
+  state.registry = list.registry;
+  state.activeBuildId = list.activeBuildId;
+  for (const s of list.states) state.states.set(s.id, s);
+  await onRegistry(list.registry);
+
+  // Async news + update checks for all builds (so subsequent tab clicks are warm)
+  for (const e of list.registry.builds) {
+    void api.fetchNews(e.id);
+    void runUpdateCheck(e.id);
+  }
+}
+
+async function onRegistry(reg: BuildsRegistry): Promise<void> {
+  if (!state.activeBuildId) state.activeBuildId = reg.defaultBuildId;
+  renderTabs(els.tabRow, reg.builds, state.activeBuildId, {
+    onSelect: (id) => { void selectBuild(id); },
+    isBusy: () => state.busy,
+  });
+  await renderActive();
 }
 
 bootstrap().catch((err) => {

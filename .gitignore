@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-tests/
 release/
 *.log
 *.tsbuildinfo
@@ -7,15 +8,23 @@ release/
 .vscode/
 .idea/
 .claude/
+.superpowers/
 launcher.config.local.json
 
 # Modpack build artefacts — too large for git
 *.zip
 *.7z
+*.jar
 build-staging/
 build_manifest.json
 ui_manifest.json
+manifests/*.json
 !manifests/*.example.json
+
+# Per-build UI asset staging (sourced from VPS ui_new/ — large)
+assets/eclipse-ui/
+assets/summermon-ui/
+assets/*-ui/
 
 # Admin-only release/deploy tooling — not part of the launcher source
 scripts/sftp-upload.py
